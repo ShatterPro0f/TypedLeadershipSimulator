@@ -284,64 +284,214 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Neutral tone: minimal emotion shift
 // - Negative tone (T_negative): triggers fear, anger in affected NPCs
 
+## 12a. LLM Resource Management & Throttling
+// To prevent overloading LLM APIs at scale (1000+ NPCs):
+//
+// Snapshot Batching (Proactive Narrative Generation):
+// - Frequency: every 1 game day (not per tick) to limit LLM calls
+// - Batch size: snapshot includes only NPCs with significant mood/loyalty changes (delta > 0.2)
+// - Priority sampling: if >100 NPCs active, sample 50 most influential (leaders, rebels, immigrants)
+// - Caching: hash world state; reuse cached response if hash matches (avoids duplicate LLM calls)
+//
+// Decision Interpretation (Reactive):
+// - Frequency: only on player input (inherently bounded)
+// - Timeout: 3 seconds max for LLM response; if exceeded, use fallback parsing
+// - Queue: if multiple simultaneous inputs, serialize (sequential processing)
+//
+// Rate Limiting:
+// - Track LLM calls per minute; implement exponential backoff if rate limits hit
+// - Fallback threshold: if LLM fails 3x in a row, switch to rule-based for 5 minutes
+// - Batch cost calculation: estimate cost before calling LLM; warn if approaching budget
+//
+// Copilot can generate:
+//   - struct SnapshotBatch { vector<int> npcIds; float significanceThreshold; }
+//   - bool shouldGenerateNarrative(int ticksSinceLastCall, int npcCount) { ... }
+//   - class LLMRateLimiter { int callsThisMinute; bool canCall(); void recordCall(); }
+
+## 12b. Error Handling & Fallback Logic
+// Detailed fallback cascade for failed LLM calls:
+//
+// Fallback Tier 1: Timeout (LLM doesn't respond within 3 seconds)
+// - Use last cached response if available (up to 5 minutes old)
+// - If no cache: generate default issue from NPC reportIssue() method
+// - Log warning: "LLM timeout; using cached narrative"
+//
+// Fallback Tier 2: API Error (LLM API returns error code)
+// - Retry with exponential backoff (1s, 2s, 4s, 8s)
+// - After 3 retries: fall back to rule-based generation
+// - Log error: "LLM API error {code}; {retries} retries failed"
+//
+// Fallback Tier 3: Invalid Response (LLM response malformed or unparseable)
+// - Attempt to extract action/tone from response using regex/heuristics
+// - If extraction fails: use default parameters (action=report, tone=neutral)
+// - Log warning: "LLM response unparseable; using default parameters"
+//
+// Rule-Based Fallback Issue Generation:
+// - Sample NPC with highest |mood delta| this turn
+// - Generate issue from NPC role + emotion state:
+//   * Farmer + angry → "Food shortage complaint"
+//   * Warrior + fearful → "Enemy threat warning"
+//   * Priest + unstable mood → "Religious crisis emerging"
+// - Fallback narrative: "{NPC.name}: {template_message}. {Faction}: {faction_status}."
+//
+// Copilot can generate:
+//   - class LLMFallback { Issue generateRuleBasedIssue(NPC npc); string getCachedNarrative(); }
+//   - enum LLMErrorTier { TIMEOUT, API_ERROR, INVALID_RESPONSE, PARSER_FAIL }
+
+## 12c. Input Parsing Confidence Scoring
+// To ensure consistent fuzzy matching and ambiguity handling:
+//
+// Confidence Scoring System:
+// - Range: 0.0 (no match) to 1.0 (exact match)
+// - Exact keyword match: confidence = 1.0
+// - Fuzzy match (Levenshtein distance < 2): confidence = 0.8-0.95
+// - Semantic match (word embedding similarity > 0.7): confidence = 0.6-0.8
+// - Combined score: take max(exact, fuzzy, semantic) across all known actions
+//
+// Ambiguity Thresholds:
+// - If single action score >= 0.9: execute (high confidence)
+// - If single action score 0.7-0.89: execute with player confirmation prompt
+// - If multiple actions tied 0.6-0.8: present 2-3 options to player
+// - If top score < 0.6: ask player to rephrase
+//
+// Example scoring:
+//   Input: "feed people"
+//   - Exact match "feed food": 1.0
+//   - Exact match "allocate food": 0.9
+//   - Result: Single high-confidence match; execute "allocate food"
+//
+//   Input: "help farm"
+//   - Fuzzy match "allocate food": 0.75 (Levenshtein distance 3)
+//   - Fuzzy match "help farmers": 0.85
+//   - Semantic match "support agriculture": 0.72
+//   - Result: Ambiguous (two tied at 0.75-0.85); prompt player: "[1] Allocate food, [2] Support farmers, [3] Something else?"
+//
+// Copilot can generate:
+//   - struct ParseResult { string action; float confidence; }
+//   - float calculateConfidence(string input, string knownAction) { ... }
+//   - vector<ParseResult> parseWithAmbiguity(string input, float threshold=0.7) { ... }
+
+## 12d. Time & Turn Scaling - Concrete Timing System
+// To ensure Copilot generates consistent time progression:
+//
+// Time Units (Game Time):
+// - 1 Tick = 1 minute (in-game time)
+// - 1 Hour = 60 ticks
+// - 1 Day = 24 * 60 = 1440 ticks
+// - 1 Year = 365 days = 525,600 ticks
+// - 1 Season = 90 days = ~129,600 ticks
+//
+// Turn Counter (for simulation logic):
+// - Increment turn counter every 10 ticks
+// - 1 "turn" = 10 minutes (in-game)
+// - NPCs update emotions/activities every turn
+// - Events check probabilities every turn
+//
+// LLM Narrative Generation Frequency:
+// - Generate narrative snapshot every 1440 ticks (1 game day)
+// - Cue: if (tickCounter % 1440 == 0) { callLLMForNarrative(); }
+// - World state changes tracked throughout day; snapshot captures daily aggregate
+//
+// NPC Growth Events (Periodic Checks):
+// - Immigration check: every 7 days (10,080 ticks)
+// - Birthdays/aging: every 1 year (525,600 ticks)
+// - Faction rebellion check: every 1 day (1440 ticks)
+// - Resource production/consumption: every 1 day (1440 ticks)
+//
+// Example Turn Structure (per tick):
+//   if (tickCounter % 1 == 0) {  // Every 1 minute
+//     updateNPCPositions();
+//     checkProximityCues();
+//   }
+//   if (tickCounter % 10 == 0) {  // Every 10 minutes (1 turn)
+//     updateNPCEmotions();
+//     checkEventProbabilities();
+//   }
+//   if (tickCounter % 1440 == 0) {  // Every 1 day
+//     callLLMForNarrativeGeneration();
+//     updateResourceProduction();
+//   }
+//   if (tickCounter % 10080 == 0) {  // Every 7 days
+//     checkImmigration();
+//   }
+//
+// Copilot can generate:
+//   - const int TICK_DURATION_MINUTES = 1;
+//   - const int TICKS_PER_HOUR = 60;
+//   - const int TICKS_PER_DAY = 1440;
+//   - bool isTimeForNarrativeGeneration(int tickCounter) { return tickCounter % 1440 == 0; }
+//   - bool isTimeForEvent(int tickCounter, EventType type) { ... }
+
 ## 13. Main Simulation Loop - With Periodic LLM Narrative Generation
 // Implement main loop (from simulation_loop.txt):
 // Loop structure: Tick → Update → Narrative Generation → Present Issues → Wait for Input
 //
 // Step 1: Advance Game Time
-//    - Increment turn counter
-//    - Update game time/season (e.g., every 10 ticks = 1 game hour; 24 hours = 1 day)
-//    - Trigger time-based events (seasons, birthdays, immigration checks)
+//    - Increment tick counter and turn counter
+//    - Update game time/season (calculate hour/day/year from tick counter)
+//    - Check periodic events: immigration (every 10,080 ticks), aging (every 525,600 ticks), faction rebellion (daily)
 //
-// Step 2: Update Simulation Systems
+// Step 2: Update Simulation Systems (every 10 ticks = every turn)
 //    - Update NPC positions (pathfinding, activity changes)
-//    - Update NPC emotions/moods/attitudes
-//    - Update resource production/consumption/scarcity
+//    - Update NPC emotions/moods/attitudes using emotional model equations
+//    - Update resource production/consumption (daily aggregation)
 //    - Update faction strength/loyalty/rebellion probability
 //    - Trigger random events (check event probabilities)
-//    - Check cascade conditions
+//    - Check cascade conditions for cascading crises
 //
-// Step 3: Periodic LLM Narrative Generation (e.g., every 10-30 game ticks)
-//    - Create world state snapshot: { npcs[], factions[], resources[], events[], culture, religion }
-//    - Call LLM: "Given this world state, what crises or opportunities are emerging? Format as narrative issues."
+// Step 3: Periodic LLM Narrative Generation (every 1440 ticks = every game day)
+//    - Condition: if (tickCounter % 1440 == 0)
+//    - Create world state snapshot: batch NPCs with delta mood > 0.2, sample top 50 if >100 active
+//    - Call LLM (with 3-second timeout): "Given this world state snapshot, what crises/opportunities are emerging?"
 //    - LLM returns: array of narrative issues with suggested action types
-//    - Store issues in queue; add to presentation stack
+//    - Cache response with world state hash for 30 minutes (avoid duplicate calls)
+//    - On LLM failure: use Fallback Tier 1-3 logic (timeout → cached response; API error → retry+rule-based; malformed → default)
+//    - Store issues in priority queue; flag most urgent for presentation
 //
 // Step 4: Present Issues to Player
-//    - Display most urgent/relevant issues from LLM-generated queue
-//    - Show NPC who triggered conversation (if proximity)
-//    - Show NPC's immediate problem (from their reportIssue() method)
-//    - Show LLM-generated narrative context
+//    - If NPC proximity triggered conversation: show NPC's name and immediate problem (reportIssue())
+//    - Otherwise: show top 2-3 LLM-generated narrative issues from queue
+//    - Display context: affected faction/resource/event, current values, mood/loyalty deltas
 //    - Example output:
 //      "[DIALOGUE] Alice (Farmer): 'We're running out of food!'
-//       [CONTEXT] Farmer faction morale: -2. Food scarcity probability: 85%. Consider rationing or trade."
+//       [CONTEXT] Food: 120 → 85 (scarcity threshold 50). Farmer faction morale: 0.5. Player reputation: +2."
 //
-// Step 5: Accept Typed Player Input
+// Step 5: Accept Typed Player Input (no timeout, but suggest actions if idle >30 seconds)
 //    - Wait for player to type decision
-//    - Timeout: if no input for N seconds, generate suggested actions via LLM
+//    - Parse input using confidence scoring (>0.9 execute, 0.7-0.89 confirm, 0.6-0.8 disambiguate, <0.6 rephrase)
+//    - If parsing confidence < 0.7: show clarification prompt with top 3 matching actions
 //
-// Step 6: LLM Decision Interpretation (Reactive)
-//    - Call LLM: "Player typed: '{input}'. Convert to action. Context: {world_state}. Known actions: {action_list}."
-//    - LLM returns: { target, action, tone, priority, narrative_feedback }
-//    - Parse into simulation parameters
+// Step 6: LLM Decision Interpretation (Reactive - 3-second timeout, no caching)
+//    - Call LLM: "Player typed: '{input}'. Context: {current_crisis}. Convert to: {target, action, tone, priority}. Known actions: {list}."
+//    - LLM returns: { target (NPC/faction/resource), action (allocate/delegate/inspire/suppress), tone (positive/neutral/negative), priority (0-10) }
+//    - On LLM failure: use local keyword-based parsing (fuzzy match to known actions)
+//    - Parse into deterministic simulation parameters
 //
 // Step 7: Execute Simulation Consequences
-//    - Update NPC emotions/loyalty based on tone and action
-//    - Update resource allocations
-//    - Recalculate faction loyalties/probabilities
-//    - Check for cascading events
-//    - Update culture/religion state
+//    - Apply deterministic updates using equations from Equations.txt:
+//      * Update target NPC: immediateEmotion E_i based on tone
+//      * Smooth to shortTermMood: M_s(t) = α·E_i + (1-α)·M_s(t-1)
+//      * Update longTermAttitude: A_l(t) = A_l(t-1) + β·M_s(t)
+//      * Update faction loyalties: L_f = w₁·A_l + w₂·R_f + w₃·E_f
+//      * Apply resource changes: allocate/consume based on action
+//      * Recalculate faction strength: S_f = Σ(L_f_i · C_i)
+//      * Check for cascading events
+//      * Update culture/religion state if action affects doctrine/norms
+// - All updates are deterministic and reproducible (same seed → same state)
 //
 // Step 8: Narrative Feedback
-//    - Combine deterministic simulation results with LLM narrative_feedback
-//    - Display: "You allocated extra food. Alice's loyalty +2. Farmer faction +1. Warriors concerned about militia supplies. Food: 120 → 80."
-//    - Store decision in history log (for LLM context on future turns)
+//    - Combine deterministic results with LLM narrative_feedback
+//    - Display: "[RESULT] You allocated extra food. Alice's loyalty +2. Farmer faction +1. Warriors concerned about supplies. Food: 120 → 80. Morale: +2."
+//    - Store decision in decision history log (for LLM context on future snapshots)
+//    - Update world state for next snapshot batch
 //
-// Step 9: Cleanup
-//    - If NPC in conversation, unfreeze (resume activity)
-//    - Age NPCs (birthdays, children born)
-//    - Check immigration/emigration
-//    - Loop back to Step 1
+// Step 9: Cleanup & Loop
+//    - If NPC in conversation: unfreeze and resume activity
+//    - Age children (if they reach 16, promote to adult NPC with skills/role)
+//    - Check immigration/emigration conditions
+//    - Log all changes to replay system for debugging
+//    - Loop back to Step 1 (increment tick counter)
+
 ## 13. Data Loading & Persistence - Performance Optimized for 1000+ NPCs
 // Binary Save Format (for save files - FAST & EFFICIENT):
 // - Use binary format for all save files: compact, fast I/O, memory efficient (supports 1000+ NPCs)
