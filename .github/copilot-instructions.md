@@ -422,6 +422,247 @@ The goal is to implement the deterministic simulation logic and data structures 
 //   - bool isTimeForNarrativeGeneration(int tickCounter) { return tickCounter % 1440 == 0; }
 //   - bool isTimeForEvent(int tickCounter, EventType type) { ... }
 
+## 12e. Input Parsing Algorithm Refinements - Hybrid Confidence Scoring
+// To ensure consistent and refined fuzzy matching implementation:
+//
+// Confidence Calculation (Three-Component Hybrid Model):
+// - Levenshtein Distance Component:
+//    * maxDist = 3 (allow up to 3 character edits)
+//    * confidence_ld = max(0, 1.0 - (distance / maxDist))
+//    * Example: "feed" vs "food" (distance 2) → 1.0 - (2/3) = 0.667
+//
+// - Word Embedding Similarity (optional, for semantic matching):
+//    * Use cosine similarity of word embeddings (if embedding model available)
+//    * Threshold: 0.65 for semantic relevance
+//    * confidence_embedding = similarity_score (0-1)
+//    * Example: "help village" vs "support agriculture" (cosine 0.72) → 0.72
+//
+// - Exact Keyword Match:
+//    * confidence_exact = 1.0 if full string match to known action
+//    * confidence_exact = 0.95 if substring match (e.g., "allocate" in "allocate_food")
+//
+// - Hybrid Score Formula:
+//    * confidence = w_ld * confidence_ld + w_embedding * confidence_embedding + w_exact * confidence_exact
+//    * Default weights: w_ld=0.4, w_embedding=0.3, w_exact=0.3
+//    * Adjust weights based on feedback: prioritize exact > embedding > Levenshtein if embedding unavailable
+//
+// - Edge Cases:
+//    * If multiple actions tie exactly at same score: rank by frequency (most-used action first)
+//    * If single action within ±0.05 of second place: treat as ambiguous (present both)
+//    * Partial input (player types incomplete command): suggest 2-3 best matches, don't execute
+//
+// Copilot can generate:
+//   - float levenshteinDistance(string a, string b, int maxDist=3) { ... }
+//   - float hybridConfidence(string input, string action, float w_ld=0.4, float w_emb=0.3, float w_exact=0.3) { ... }
+//   - struct ParseResult { string action; float confidence; int usageFrequency; }
+//   - SortedMap<float, vector<ParseResult>> rankActionsByConfidence(string input) { ... }
+
+## 12f. Faction Conflict Resolution - Influence Weight & Tie-Breaking
+// To eliminate ambiguity in handling conflicting faction requests:
+//
+// Influence Weight Calculation (from Equations.txt adaption):
+// - influenceWeight(faction) = α * loyalty + β * strength + γ * player_alignment + δ * leadership_effectiveness
+//    * loyalty = average loyalty of faction members toward player (0-1)
+//    * strength = S_f from Equations.txt: Σ(L_f_i * C_i) where C_i = NPC capability
+//    * player_alignment = -1 (hostile) to +1 (friendly); neutral = 0
+//    * leadership_effectiveness = (number_of_leaders * avg_leader_influence) / faction_size
+//    * Default weights: α=0.3, β=0.35, γ=0.2, δ=0.15
+//
+// - Scoring Example:
+//    * Merchant faction: loyalty=0.7, strength=0.6, alignment=0.5, leadership=0.8
+//      influenceWeight = 0.3*0.7 + 0.35*0.6 + 0.2*0.5 + 0.15*0.8 = 0.21 + 0.21 + 0.1 + 0.12 = 0.64
+//    * Warrior faction: loyalty=0.5, strength=0.8, alignment=-0.3, leadership=0.6
+//      influenceWeight = 0.3*0.5 + 0.35*0.8 + 0.2*(-0.3) + 0.15*0.6 = 0.15 + 0.28 - 0.06 + 0.09 = 0.46
+//
+// Tie-Breaking Rules (if influenceWeights differ by < 0.05):
+// 1. Severity ranking: faction requesting severe action (rebellion, sabotage) gets lower priority (prevents escalation)
+// 2. Historical alignment: faction with more positive past decisions gets priority
+// 3. NPC count: larger faction gets priority (affects more settlement members)
+// 4. Player preference: if player previously favored one faction, continue that trend (persistence)
+// 5. Alphabetical: if all equal, use faction name alphabetically (deterministic tie-break)
+//
+// Resolution Strategy:
+// - Rank all conflicting factions by influenceWeight
+// - Player decision applies primarily to top-ranked faction
+// - Secondary factions receive mitigated effects (40-60% of impact on loyalty)
+// - Tertiary factions aware of decision but minimal loyalty change
+// - Log decision in dispute history to inform future tie-breaking
+//
+// Copilot can generate:
+//   - float calculateInfluenceWeight(Faction f, float α=0.3, float β=0.35, float γ=0.2, float δ=0.15) { ... }
+//   - struct ConflictResolution { Faction primary; vector<Faction> secondary; vector<Faction> tertiary; }
+//   - ConflictResolution resolveFactionConflict(vector<Faction> requestingFactions, string playerDecision) { ... }
+//   - int tieBreaker(Faction a, Faction b, vector<Decision> history) { ... }
+
+## 12g. NPC Lazy Loading & Memory Optimization for 1000+ NPCs
+// To ensure scalability without loading all NPCs into memory simultaneously:
+//
+// Active Set Management:
+// - Definition: "Active" NPCs = currently loaded in memory + visible to player or affecting simulation this tick
+// - Maximum active NPCs: 100-200 (tunable based on hardware; default 150)
+// - Trigger: When active count approaches max, unload least-relevant NPCs
+//
+// Relevance Scoring (for determining which NPCs to keep loaded):
+// - distanceToPlayer = distance(npc.position, player.position)
+// - timeUntilRelevantEvent = ticks until NPC is scheduled to take action (immigration, birthday, faction meeting)
+// - currentInfluence = loyalty * (faction.strength + advisor_influence)
+// - relevanceScore = w_dist * (1 - normalize(distanceToPlayer)) + w_event * (1 - normalize(timeUntilRelevantEvent)) + w_influence * currentInfluence
+//    * Default weights: w_dist=0.5, w_event=0.3, w_influence=0.2
+//    * normalize(value) = clip(value / threshold, 0, 1)
+//
+// Loading Strategy:
+// - Unload NPCs when:
+//    * Distance > 50 units from player (beyond perception range)
+//    * No scheduled events for next 10 days
+//    * Loyalty/faction strength negligible (< 0.1)
+// - Unload order: sort by relevanceScore ascending, unload from tail
+// - Store unloaded NPC data: lightweight record (id, faction_id, last_state_snapshot, position)
+//    * Memory cost: ~10 bytes per unloaded NPC (vs 200+ bytes when loaded)
+//
+// Re-loading Strategy:
+// - Reload when:
+//    * Player moves within 30 units of unloaded NPC
+//    * Scheduled event becomes imminent (< 1 day away)
+//    * Faction calls NPC to meeting/action
+// - Load order: sort by relevanceScore descending, load in priority order until active cap reached
+// - State restoration: restore mood/attitude from last snapshot, apply tick deltas if idle period > 1 day
+//    * Delta application: smooth attitude changes over idle period using exponential decay
+//
+// Serialization for Lazy Loading:
+// - Each NPC has isDynamicLoaded flag (true = in memory, false = on disk)
+// - Unloaded NPCs stored in lightweight NPCSnapshot format: { id, name, position, faction_id, loyalty, mood, last_tick }
+// - On load, reconstruct full NPC from binary file or memory cache
+// - Maintain index file (npc_registry.idx) mapping NPC id → file offset for O(1) disk access
+//
+// Copilot can generate:
+//   - struct NPCSnapshot { int id; Vector3 position; int faction_id; float loyalty; float mood; int last_tick; }
+//   - float relevanceScore(NPC npc, Player player, int currentTick) { ... }
+//   - void manageActiveSet(NPCRegistry& registry, int maxActive, int currentTick) { ... }
+//   - void unloadNPC(NPC npc, string cachePath) { ... }
+//   - NPC* reloadNPC(int id, string cachePath) { ... }
+
+## 12h. Equations Reference Guidelines - Deterministic System Implementation
+// To ensure Copilot correctly implements all deterministic formulas from /Open Game/:
+//
+// File Structure & Access:
+// - All formulas referenced in this document come from /Open Game/ directory
+// - Copilot should prioritize exact equations from these files over approximations:
+//    * /Open Game/Equations.txt → Authoritative source for all mathematical models
+//    * /Open Game/npc_advisor_profile.txt → NPC attribute definitions and constraints
+//    * /Open Game/resource_economy.txt → Resource production/consumption/scarcity formulas
+//    * /Open Game/faction_culture_religion.txt → Faction strength and emergence probability
+//    * /Open Game/events_crises.txt → Event probability and cascading mechanics
+//    * /Open Game/diplomacy_relationships.txt → Diplomatic scoring and relationship updates
+//
+// Implementation Strategy:
+// - When Copilot encounters a formula reference (e.g., "E_i = f(tone, relevance, bias, socialPressure)"):
+//    1. Check Equations.txt for exact formula with parameters and coefficients
+//    2. Extract numerical coefficients (e.g., alpha=0.7, beta=0.3)
+//    3. Generate code that matches formula exactly (no simplifications)
+//    4. Add comments showing formula in mathematical notation alongside code
+//
+// - Example Implementation Pattern:
+//    * Mathematical formula: E_i = θ_1 * tone + θ_2 * relevance + θ_3 * bias + θ_4 * socialPressure
+//    * Copilot code comment:
+//      // E_i = θ_1*T + θ_2*R + θ_3*B + θ_4*SP (from Equations.txt L42)
+//      float immediateEmotion = theta_1 * tone + theta_2 * relevance + theta_3 * bias + theta_4 * socialPressure;
+//
+// Determinism Guarantees:
+// - All simulations must be reproducible: given same seed + input, produce same state
+// - Use seeded random number generator (e.g., std::mt19937 with fixed seed for testing)
+// - Do NOT use system time, floating-point rounding, or platform-dependent operations
+// - Store all intermediate calculations with sufficient precision (float64 minimum)
+// - Test: snapshot game state at same tick from two runs; verify byte-identical output
+//
+// Formula Validation Checklist:
+// - [ ] All constants copied exactly from /Open Game/ source
+// - [ ] All weights/coefficients (θ, α, β, γ, δ, w_i) match design doc values
+// - [ ] Smoothing operations use correct exponential decay formula: X(t) = α*Y + (1-α)*X(t-1)
+// - [ ] Probability calculations use sigmoid or normalized ranges (0-1)
+// - [ ] Array indices and vector operations match documented constraints
+// - [ ] Special cases (e.g., division by zero) handled as specified
+//
+// Copilot Can Generate:
+// - Function signatures that mirror formula structure
+// - Inline comments showing mathematical notation alongside code
+// - Unit tests comparing output against hand-calculated values from Equations.txt
+// - Validation functions: verifyDeterminism(initialState, random_seed) { ... }
+
+## 12i. Player Guidance & UI Hints - Standard Prompts and Feedback Formats
+// To ensure consistent and clear player feedback across all UI interactions:
+//
+// Standard Prompt Templates (for player input parsing and disambiguation):
+// - High Confidence (>= 0.9):
+//    "[You] {player_input}
+//     [SYSTEM] Executing action: {action}. {Brief result preview}."
+//
+// - Medium Confidence (0.7-0.89):
+//    "[You] {player_input}
+//     [SYSTEM] Interpreting as: {action}. Confirm? Y/N
+//     [Hint] If incorrect, type 'cancel' or clarify your input."
+//
+// - Ambiguous (0.6-0.8, multiple matches):
+//    "[You] {player_input}
+//     [SYSTEM] Your input matches multiple actions. Which did you mean?
+//     [1] {action_1} — {brief_effect}
+//     [2] {action_2} — {brief_effect}
+//     [3] Try something else
+//     [Hint] Type '1', '2', or '3' to select."
+//
+// - Low Confidence (< 0.6):
+//    "[You] {player_input}
+//     [SYSTEM] I didn't understand that. Try rephrasing.
+//     [Hint] Known actions: allocate food, delegate task, negotiate peace, inspire workers, ..."
+//
+// Feedback Format (after decision execution):
+// - Standard Result Format:
+//    "[RESULT] Your decision: {action_summary}
+//     [{NPC_NAME} ({role})] {NPC_reaction_quote or observation}
+//     [IMPACT] {target}: {metric_old} → {metric_new} ({change_symbol}{change_value})
+//     [FACTION] {faction_name}: Loyalty {old} → {new}; Morale: {mood_description}
+//     [RESOURCES] {resource}: {quantity} (consumption: {rate}/day)
+//     [CONTEXT] {brief_narrative_explanation or cascade warning}"
+//
+// - Example Result:
+//    "[RESULT] You allocated 20 food rations to the farmers.
+//     [Alice (Farmer)] 'Thank you! This will help us through the winter.'
+//     [IMPACT] Food: 120 → 100 (-20)
+//     [FACTION] Farmer: Loyalty 0.6 → 0.8; Morale: Content
+//     [RESOURCES] Food: 100 (consumption: 15/day)
+//     [CONTEXT] Warriors are concerned about reduced supplies. Morale may decline."
+//
+// Context-Aware Hints (shown after player actions):
+// - Scarcity Warning: "⚠ Food approaching scarcity threshold (50). Consider trade or rationing."
+// - Faction Warning: "⚠ Warrior faction morale declining. Risk of rebellion if ignored."
+// - Opportunity: "✓ Favorable conditions for immigration this season. Settlement reputation: +1."
+// - Cascade Risk: "⚠ Recent religious schism may trigger cultural division. Monitor priest factions."
+// - Time Warning: "⏱ 3 days until harvest season. Plan resource allocation now."
+//
+// Player Help System (accessible via 'help' command or '?'):
+// - General Help: "help" → Shows list of major actions and their effects
+// - Action Help: "help allocate" → Shows detailed description of allocate action with examples
+// - Context Help: Shows current crisis/opportunity and suggested responses
+// - Faction Help: "factions" → Lists all factions, their members, and alignment with player
+// - Resource Help: "resources" → Shows production/consumption rates and stockpile status
+//
+// Conversation UI (during NPC proximity dialogue):
+// - Display format:
+//    "[DIALOGUE] {NPC_NAME} ({role}, {faction})
+//     '{NPC_dialogue_or_issue_statement}'
+//     [Context] Loyalty: {loyalty}; Mood: {mood}; Concern: {concern}
+//     [You can:]
+//     {response_option_1}
+//     {response_option_2}
+//     {response_option_3}
+//     [Type action or say 'leave' to end conversation]"
+//
+// Copilot Can Generate:
+//   - string formatPrompt(ParseResult result, float confidence) { ... }
+//   - string formatResult(Decision decision, SimulationState before, SimulationState after) { ... }
+//   - string formatHint(SimulationState state, Event triggeringEvent) { ... }
+//   - string formatDialogue(NPC npc, Player player) { ... }
+//   - void displayHelpMenu(string topic) { ... }
+
 ## 13. Main Simulation Loop - With Periodic LLM Narrative Generation
 // Implement main loop (from simulation_loop.txt):
 // Loop structure: Tick → Update → Narrative Generation → Present Issues → Wait for Input
@@ -492,7 +733,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 //    - Log all changes to replay system for debugging
 //    - Loop back to Step 1 (increment tick counter)
 
-## 13. Data Loading & Persistence - Performance Optimized for 1000+ NPCs
+## 14. Data Loading & Persistence - Performance Optimized for 1000+ NPCs
 // Binary Save Format (for save files - FAST & EFFICIENT):
 // - Use binary format for all save files: compact, fast I/O, memory efficient (supports 1000+ NPCs)
 // - Optional: Compress binary with gzip for 50%+ file size reduction
@@ -525,7 +766,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 //    1. Call saveToBinary() to write entire game state efficiently
 // - Registries maintain in-memory indices (map<id, NPC*>) for O(1) lookup
 
-## 14. Central NPC Registry & Memory Management
+## 15. Central NPC Registry & Memory Management
 // Implement NPCRegistry singleton to manage all NPCs efficiently:
 // - struct NPCRegistry:
 //    - map<int, NPC*> npcById;  // O(1) lookup by ID
@@ -540,7 +781,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Registries load/save via binary format for efficiency
 // - Example: "Faction has memberIds [1, 5, 12] -> lookup via NPCRegistry.getNPCById()"
 
-## 15. Enum Definitions for Memory Efficiency
+## 16. Enum Definitions for Memory Efficiency
 // Define global enums to replace string attributes (reduce file size 50%+):
 // enum Mood { NEUTRAL=0, HAPPY=1, UNHAPPY=2, ANGRY=3, FEARFUL=4, ... };
 // enum Skill { AGRICULTURE=0, DIPLOMACY=1, COMBAT=2, EDUCATION=3, ... };
@@ -553,7 +794,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Implement lookup functions: string moodToString(Mood m), Mood stringToMood(string s)
 // - Use in binary serialization for compact storage
 
-## 16. Randomness and Probabilities
+## 17. Randomness and Probabilities
 // Implement random number generation for:
 // - Event triggering probability
 // - NPC mood fluctuations
@@ -565,7 +806,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Deterministic systems: loyalty calculations, resource consumption, faction strength
 // - Random systems: mood swings, event triggers, NPC decision variability
 
-## 17. Handling Conflicting Faction Requests
+## 18. Handling Conflicting Faction Requests
 // When multiple factions request contradictory actions, implement priority system:
 // - Calculate influenceWeight for each faction (based on loyalty, strength, alignment with player)
 // - Rank factions by influence
@@ -574,7 +815,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Copilot can generate logic like:
 //   void resolveFactionConflicts(vector<Faction> factions, string playerDecision) { ... }
 
-## 18. Narrative Generation Guidelines
+## 19. Narrative Generation Guidelines
 // - Maintain a clear, concise, and informative tone
 // - Include mechanical updates first (loyalty, resource change, event effects)
 // - Optionally append brief flavor text for immersion (1-2 sentences max)
@@ -584,7 +825,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Copilot can generate functions like:
 //   string generateNarrativeFeedback(NPC npc, Resource resource, Event event) { ... }
 
-## 19. Suggested Copilot Workflow
+## 20. Suggested Copilot Workflow
 Write a detailed comment describing the class, function, or feature you want Copilot to generate.
 
 Accept suggestions using Tab or arrow keys.
@@ -597,7 +838,7 @@ Commit regularly to GitHub with clear messages.
 
 Use modular JSON files for save/load operations and data-driven initialization.
 
-## 20. Prototype Milestones
+## 21. Prototype Milestones
 Text-based loop with 2 NPCs, 1 advisor, and 1 resource.
 
 NPC issue reporting and typed decision response.
@@ -612,7 +853,7 @@ Optional LLM integration for natural language interpretation.
 
 Iterative expansion with emergent narrative and gameplay.
 
-## 21. 3D Environment Future-Proofing
+## 22. 3D Environment Future-Proofing
 // To ensure the framework can transition to 3D graphics when ready:
 // - All NPCs, Resources, and Factions include position structs (x, y, z floats)
 // - Events store optional location data for spatial effects and visualization
@@ -626,7 +867,7 @@ Iterative expansion with emergent narrative and gameplay.
 //    4. Display events visually while maintaining text-based input for decisions
 //    5. Stream simulation updates to a graphics engine (keep deterministic core separate)
 
-## 22. Performance Notes
+## 23. Performance Notes
 // For 1000+ NPCs and minimal hardware overhead:
 // - Binary save format: ~50 bytes/NPC (vs 500+ bytes in JSON)
 // - 1000 NPCs = ~50KB binary save (vs 500+ KB JSON)
@@ -634,7 +875,7 @@ Iterative expansion with emergent narrative and gameplay.
 // - Enums reduce memory by 50%+ vs string storage
 // - All core systems use ID-based references, enabling lazy-loading future optimization
 
-## 23. Notes
+## 24. Notes
 Keep all core simulation deterministic; randomness only for flavor and unpredictability.
 
 Track NPCs, factions, resources, and events using vectors/arrays for efficient iteration.
