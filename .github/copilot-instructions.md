@@ -1056,6 +1056,302 @@ The goal is to implement the deterministic simulation logic and data structures 
 //   - bool shouldGenerateConversation(NPC npc1, NPC npc2, int currentTick) { ... }
 //   - void displayAmbientConversationLog(int maxRecent=50) { ... }
 
+## 12g. NPC Pathfinding to Moving Target
+// To handle NPCs intelligently pursuing player without excessive CPU cost:
+//
+// Pathfinding Update Strategy:
+// - Recalculate path every 5 ticks (not every tick, to avoid excessive pathfinding overhead)
+//    * NPC knows player's current position from proximity checks
+//    * If player moved >10 units since last path calc: recalculate immediately
+//    * Otherwise: continue along current path (smooth, predictable movement)
+// - Arrival tolerance: NPC reaches player when distance < 5 units (not exact position match)
+// - Movement speed: tunable per NPC role (faster warriors, slower priests)
+//
+// Stuck Detection & Recovery:
+// - If NPC hasn't moved closer in 30 consecutive ticks: attempt alternate path
+// - If still stuck after 2 attempts: give up and wait for player to approach (prevents infinite loops)
+// - Log stuck events for debugging pathfinding issues
+// - Stuck NPCs resume pursuit when player moves within 10 units
+//
+// Result: NPCs intelligently pursue moving player without pathfinding-induced lag
+// - Copilot can generate:
+//    bool shouldRecalcPath(NPC npc, Player player, int lastPathCalcTick) { ... }
+//    void pathfindToMovingTarget(NPC& npc, Player player, int currentTick) { ... }
+//    bool detectNPCStuck(NPC npc, vector<Vector3> lastPositions) { ... }
+
+## 12h. LLM Context Pruning for Efficiency
+// To prevent LLM prompt context explosion when scaling to 1000+ NPCs:
+//
+// World State Snapshot Pruning:
+// - Include only NPCs/factions with deltas > threshold (not all 1000 NPCs)
+//    * NPCs with mood delta > 0.2
+//    * Factions with loyalty change > 0.15
+//    * Resources crossed scarcity
+//    * Events within player influence radius (100 units)
+// - Result: Send ~50 relevant NPCs instead of 1000 (20x smaller context)
+//
+// Decision Interpretation Context:
+// - Include only relevant NPCs when player makes decision
+//    * If player says "help farmers": include farmer faction + nearby NPCs (20-50 range)
+//    * Exclude distant NPCs irrelevant to decision scope
+// - Result: Focused context relevant to player action
+//
+// NPC Conversation Context:
+// - Use lightweight context for ambient conversations
+//    * Only two NPC attributes: {name, role, mood, recent_event}
+//    * Location and activity status
+//    * Omit full faction/culture state (too heavy for ambient)
+// - Result: Small prompts for ambient dialogue (100-150 tokens vs 500+)
+//
+// Token Cost Optimization:
+// - WorldStateNarrative: 300 prompt tokens, 200 completion = ~$0.005
+// - DecisionInterpretation: 200 prompt tokens, 100 completion = ~$0.002
+// - NPCConversation: 250 prompt tokens, 150 completion = ~$0.004
+// - Pruning reduces all by ~50%, keeping costs manageable at scale
+//
+// Copilot can generate:
+//   vector<NPC*> pruneContextNPCs(vector<NPC*> allNPCs, float thresholdDelta) { ... }
+//   string buildPrunedWorldStatePrompt(WorldState state, vector<NPC*> relevantNPCs) { ... }
+//   vector<NPC*> getDecisionContextNPCs(string playerDecision, Player player, int proximityRadius) { ... }
+
+## 12i. Event Cascading: Deterministic & Probabilistic Stages
+// To clearly define how events trigger secondary events:
+//
+// Cascade Mechanics (Three-Stage Model):
+// Stage 1 - Deterministic Primary Event:
+//    * Famine triggered by: food_level < scarcity_threshold for 5 consecutive days
+//    * This is deterministic: when condition met, famine occurs
+//    * No RNG involved in primary trigger
+//
+// Stage 2 - Probabilistic Secondary Events:
+//    * Calculate cascade probability: P_cascade = sigmoid(impact_level * trigger_factor)
+//    * Example: Famine (impact=8) → migration (if P_cascade > 0.6: 60% chance migration occurs)
+//    * Migration (impact=6) → cultural_shift (if migration happened: 70% chance shift)
+//    * RNG determines if cascade propagates (seeded for determinism)
+//
+// Stage 3 - LLM Narrative Discovery:
+//    * LLM receives world state snapshot with all triggered events: [famine, migration, cultural_shift]
+//    * LLM does NOT decide cascades (simulation does that)
+//    * LLM generates narrative framing: "Food crisis has sparked exodus. Settlement culture shifting..."
+//    * LLM narrative provides coherence without controlling cascade logic
+//
+// Result: Cascades deterministic & reproducible, LLM adds narrative coherence
+// - Copilot can generate:
+//    float calculateCascadeProbability(Event primaryEvent, float impactLevel) { ... }
+//    bool shouldCascade(float cascadeProb, int randomSeed) { ... }
+//    vector<Event> triggerSecondaryEvents(Event primaryEvent, float cascadeProb) { ... }
+//    string narrateCascade(vector<Event> cascade, WorldState state) { ... }
+
+## 12j. Emotion Model Update Frequency & Precision
+// To specify when and how emotions are updated:
+//
+// Immediate Emotion E_i - Update on Event (Not Scheduled):
+//    * Triggered when: player makes decision, resource scarcity occurs, faction conflict emerges, event triggers
+//    * Calculated as: E_i = θ₁*tone + θ₂*relevance + θ₃*bias + θ₄*socialPressure (from Equations.txt)
+//    * Applied to affected NPCs only (not all NPCs every tick)
+//    * Example: Player allocates extra food → Farmers' E_i calculated immediately
+//
+// Short-Term Mood M_s - Update Every Tick (Continuous):
+//    * Updated for ALL active NPCs every tick
+//    * Formula: M_s(t) = α*E_i + (1-α)*M_s(t-1) where α ≈ 0.1 (exponential decay)
+//    * Ensures emotional persistence: recent E_i heavily weighted, older emotions fade
+//    * Range: [0, 1] where 0=sad/anxious, 0.5=neutral, 1=angry/excited
+//
+// Long-Term Attitude A_l - Update Every Tick (Slow Memory):
+//    * Updated for ALL active NPCs every tick
+//    * Formula: A_l(t) = A_l(t-1) + β*M_s(t) where β ≈ 0.01 (slow integration)
+//    * Accumulates over time: reflects player's long-term behavior (memory)
+//    * Range: [0, 1] toward player (0=hostile, 1=devoted)
+//
+// Batch Consistency Check - Every 100 Ticks:
+//    * Verify all NPC emotions within [0, 1] bounds
+//    * Catch floating-point drift in calculations
+//    * Clamp any out-of-range values: E_i = max(0, min(1, E_i))
+//    * Log any clamping for debugging
+//
+// Result: Emotions continuously responsive but stable over long periods
+// - Copilot can generate:
+//    void updateImmediateEmotion(NPC& npc, float tone, float relevance, float bias, float socialPressure) { ... }
+//    void updateShortTermMood(NPC& npc, float alpha=0.1) { ... }
+//    void updateLongTermAttitude(NPC& npc, float beta=0.01) { ... }
+//    void validateEmotionBounds(vector<NPC>& npcs) { ... }
+
+## 12k. NPC Problem Resolution Criteria
+// To define when NPC problems are considered "resolved":
+//
+// Problem State Machine:
+// - UNRESOLVED: problem_severity >= 0.3 → NPC pathfinds to player
+// - IN_DIALOGUE: player conversing with NPC → NPC frozen, listening
+// - ACKNOWLEDGED: player responded → NPC recognizes input (may not solve problem)
+// - RESOLVED: world_state improved → problem_severity < 0.3
+// - PERSISTENT: dialogue complete but problem unresolved → NPC can re-initiate after cooldown
+//
+// Resolution Criteria (Problem Type Dependent):
+// - Food Shortage:
+//    * Resolved when: food > scarcity_threshold for 2 consecutive days
+//    * Persistence: if player ignores, food depletes again → NPC re-initiates after 1 day
+// - Faction Conflict:
+//    * Resolved when: faction_loyalty > 0.5 (faction satisfied with player)
+//    * Persistence: if loyalty drops again below 0.3 → re-initiate
+// - Moral/Religious Crisis:
+//    * Resolved when: player acknowledges issue (even without action)
+//    * Persistence: low chance (~20%) NPC brings up again if underlying issue persists
+// - Personal Grievance:
+//    * Resolved when: NPC's individual loyalty improves by >0.1 from player action
+//    * Persistence: if loyalty drops again → re-initiate
+//
+// Persistence Mechanics:
+// - Cooldown: NPC won't re-initiate dialogue for 1 game day (14,400 ticks)
+// - Escalation: each re-initiation increases problem_severity by 0.1 (up to max 1.0)
+// - Max attempts: if problem unresolved for 5 days, NPC gives up (marks as "lost cause")
+//
+// Result: Problems naturally resolve when conditions improve; persistent issues escalate
+// - Copilot can generate:
+//    enum ProblemState { UNRESOLVED, IN_DIALOGUE, ACKNOWLEDGED, RESOLVED, PERSISTENT }
+//    bool isProblemResolved(NPC npc, WorldState state) { ... }
+//    float calculateResolutionDeadline(NPC npc, int currentTick) { ... }
+//    void escalatePersistentProblem(NPC& npc) { ... }
+
+## 12l. NPC Conversation Scheduling Relative to Player Events
+// To clarify LLM queue priority and timing interaction:
+//
+// Priority Queue Hierarchy (Strict Order):
+// 1. PlayerInputQueue (HIGHEST):
+//    * Player types command → IMMEDIATE processing
+//    * Timeout: 3s (player expects quick feedback)
+//    * Blocks NPC conversations while processing
+//    * Callback updates NPC state when complete
+//
+// 2. WorldStateNarrativeQueue (MEDIUM):
+//    * Triggered when world state significantly changes
+//    * Timeout: 10s (can be slower, doesn't block player)
+//    * If new world state arrives while one pending → drop old, queue new
+//    * Suspends NPC conversation generation during processing
+//
+// 3. NPCConversationQueue (LOWEST):
+//    * Ambient NPC-to-NPC dialogue generation
+//    * Timeout: 5s (ambient, lowest priority)
+//    * Max 3 concurrent NPC calls (can run in parallel)
+//    * Only processes when world state LLM idle for >10 seconds
+//
+// Timeline Example:
+//   Tick 1000: Player types "allocate food"
+//   Tick 1001: PlayerInputQueue processes (player input LLM call started)
+//   Tick 1002-1003: Player input LLM processing (NPC conversations suppressed)
+//   Tick 1004: Player input completes; world state changes detected
+//   Tick 1005: WorldStateNarrativeQueue processes (world state LLM call started)
+//   Tick 1006-1008: World state LLM processing (NPC conversations still suppressed)
+//   Tick 1009: World state LLM completes; NPC conversation queue can now process
+//   Tick 1010+: NPCConversationQueue begins processing pending ambient conversations
+//
+// Result: Player always gets responsive feedback; world state prioritized; NPC conversations fill quiet moments
+
+## 12m. Advisor Recommendation UI & Ranking
+// To display advisor suggestions when player seeks counsel:
+//
+// Advisor Recommendation Display:
+// When player asks for advice or faces crisis, show ranked recommendations with influence scores and text
+// - Display format: Advisor name, specialty, relevance/trust/influence scores, suggested action text
+// - Rank advisors by influenceScore (highest first)
+// - Show top 3 advisors; hide lower-ranked to avoid UI clutter
+//
+// Advisor Ranking Formula:
+// - influenceScore = 0.4*relevance + 0.3*trust + 0.2*faction_strength + 0.1*past_accuracy
+//    * relevance = how relevant advisor specialty to current crisis
+//    * trust = player's trust level with advisor (0-1)
+//    * faction_strength = how powerful advisor's faction is
+//    * past_accuracy = how often advisor's past recommendations turned out well
+//
+// Advisor Response to Player Action:
+// - If player takes advisor's recommendation:
+//    * Advisor trust increases by 0.1
+//    * Advisor's faction gains reputation (+0.05)
+// - If player ignores advisor:
+//    * No immediate penalty, but trust may decrease if ignored repeatedly
+// - If player takes opposite action:
+//    * Advisor trust decreases by 0.15
+//    * Advisor's faction may become offended (-0.1 loyalty)
+//
+// Copilot can generate:
+//    float calculateAdvisorInfluence(Advisor advisor, Crisis currentCrisis) { ... }
+//    struct AdvisorRecommendation { Advisor advisor; string advice; float influenceScore; }
+//    vector<AdvisorRecommendation> rankAdvisors(vector<Advisor> advisors, Crisis crisis, int maxDisplay=3) { ... }
+//    void updateAdvisorTrustAfterAction(Advisor& advisor, bool playerFollowedAdvice) { ... }
+
+## 12n. QA Testing & Validation Checklist
+// To guide comprehensive testing of simulation systems:
+//
+// Determinism Testing:
+// - Reproducibility Test:
+//    * Run identical save with seed=42 twice
+//    * Compare world state at ticks 1000, 5000, 10000
+//    * Assert byte-identical output (within float64 precision 1e-15)
+//    * If mismatch: identify non-deterministic source (RNG, floating-point, LLM)
+//
+// - Replay Validation:
+//    * Load save + replay_log.json
+//    * Execute frame-by-frame; verify each LLM call matches logged output
+//    * Verify RNG decisions match logged random numbers
+//    * Pass: simulation diverges from logged state -> immediate error report
+//
+// Cascade Testing:
+// - Event Chain Test:
+//    * Manually trigger famine (set food=0)
+//    * Verify migration cascade occurs with expected probability
+//    * Log entire cascade chain; verify each step
+//    * Check LLM narrative mentions all triggered events
+//
+// LLM Fallback Testing:
+// - Offline Mode Test:
+//    * Block LLM API; verify rule-based fallback activates
+//    * Generate plausible but formulaic narratives
+//    * Verify no hallucination (text stays within templates)
+//    * Check determinism of offline fallback (same input = same output)
+//
+// Performance Testing:
+// - Memory Benchmark:
+//    * Load save with 1000 NPCs
+//    * Measure peak memory: target <200MB active set
+//    * Verify unloaded NPCs use <10 bytes each (snapshots)
+//    * Check memory doesn't leak over 10+ hours playtime
+//
+// - Frame Time Benchmark:
+//    * Measure tick time with 1000 active NPCs
+//    * Target: <16ms per tick (60 FPS)
+//    * Profile: identify slowest systems (pathfinding, emotion updates, LLM calls)
+//    * Optimize bottlenecks
+//
+// - Save/Load Benchmark:
+//    * Time save operation: target <2 seconds for 1000 NPCs
+//    * Time load operation: target <2 seconds
+//    * Verify binary format achieves 10-100x smaller files than JSON
+//
+// Edge Case Testing:
+// - Mathematical Edge Cases:
+//    * Divide by zero: empty faction (all members dead/left)
+//    * Overflow: NPC loyalty at exactly 1.0, then +0.1 applied
+//    * Underflow: NPC mood at exactly 0.0, then -0.1 applied
+//    * Zero faction: faction with 0 members exists in simulation
+//
+// - Narrative Edge Cases:
+//    * Player kills own faction leader: verify faction survives, chooses new leader
+//    * All resource depleted: verify NPCs recognize crisis, LLM narrative addresses
+//    * Resource at exact scarcity threshold: verify triggers scarcity check
+//    * Simultaneous events: food scarcity + rebellion + religious schism at same tick
+//
+// - UI Edge Cases:
+//    * 100+ NPCs reaching player simultaneously: queue properly, no UI crash
+//    * Ambiguous player input matching 5+ actions: present disambiguation
+//    * LLM timeout during player input: fallback to keyword parsing
+//    * Save/load during active LLM call: queue request, handle gracefully
+//
+// Copilot can generate:
+//    bool testDeterminism(string savePath, int seed, int numTicks) { ... }
+//    bool testCascadeChain(Event primaryEvent, vector<Event>& expectedCascade) { ... }
+//    bool testLLMFallback(string prompt, string& offlineOutput) { ... }
+//    PerformanceMetrics benchmarkTick(int npcCount, int numTicks) { ... }
+//    void validateEdgeCase(string caseName, function<void()> testFn) { ... }
+
 ## 13. Main Simulation Loop - Continuous Real-Time Event-Driven Architecture
 // Implement main loop (from simulation_loop.txt, adapted for continuous real-time):
 // Loop structure: Tick → Update All Systems → Check Conditions → Event-Driven Triggers → Render
@@ -1182,6 +1478,67 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Alive: NPC-to-NPC conversations fill narrative gaps between player-facing events (Step 4b)
 // - Reproducible: Same seed + inputs = same simulation state every time
 
+## 12o. NPC Lazy Loading & Memory Optimization for 1000+ NPCs - Advanced Strategies
+// To ensure scalability without loading all NPCs into memory simultaneously (refined version):
+//
+// VIP Protection Strategy (Never Unload):
+// - Leaders, advisors, and faction heads NEVER unloaded from active set
+//    * Check: if (npc.isLeader() || npc.isAdvisor() || npc.isFactionHead()) → always keep loaded
+//    * Result: Key NPCs always responsive, no sudden "missing NPC" scenarios
+//    * Memory cost: ~50-100 VIPs = ~10-20KB, negligible impact
+//
+// Standard Unload Strategy (Distance + Time-Based):
+// - Unload NPCs when BOTH conditions met:
+//    * Distance from player > 50 units AND
+//    * No scheduled events for next 10 game days
+// - Unload priority: sort by relevanceScore(npc, player, time) ascending
+// - Formula: relevance = w_dist * (1 - normalize(distance)) + w_event * (1 - normalize(timeUntilEvent)) + w_influence * loyalty
+//    * w_dist = 0.5, w_event = 0.3, w_influence = 0.2
+//    * normalize(value) = clip(value / threshold, 0, 1)
+// - Result: NPCs far from player and with no near-term events unloaded first
+//
+// Aggressive Unload Strategy (Memory Critical):
+// - If active set > 200 NPCs OR memory usage > 150MB:
+//    * Apply aggressive unloading immediately
+//    * Unload even nearby NPCs if very low relevance (influence < 0.05)
+//    * Increase unload rate: remove up to 50 NPCs per tick until below threshold
+//    * Log warning: "Memory pressure: aggressively unloading 50 NPCs"
+//    * Result: Emergency fallback to maintain 60 FPS under memory stress
+//
+// Re-loading Strategy (Optimized):
+// - Reload NPCs when:
+//    * Player moves within 30 units of unloaded NPC (proximity trigger)
+//    * Scheduled event becomes imminent (< 30 game minutes away)
+//    * Faction calls NPC to meeting/action (faction activation)
+//    * NPC pathfinding path crosses player's current region
+// - Load priority: sort by relevanceScore descending; load highest-priority first
+// - Batch reloading: load up to 10 NPCs per tick (smooth loading, avoid frame hiccups)
+// - State restoration: restore mood/attitude from snapshot, apply smooth deltas if idle > 1 hour
+//
+// Snapshot Format (Lightweight Unloaded NPCs):
+// - Store: { id, name, position, faction_id, loyalty, mood, last_tick, eventSchedule[], homeLocation }
+// - Size: ~50 bytes per NPC (vs 200+ bytes when fully loaded)
+// - Storage: serialized to binary file or LZ4-compressed in-memory cache
+//    * File format: npc_snapshots.bin with index for O(1) lookup by ID
+//    * In-memory: maintain circular buffer of 500 least-recently-used snapshots
+// - Recovery: when loading from save, snapshots recreate NPCs on demand
+//
+// Tracking & Queuing:
+// - Maintain activeSet (currently loaded NPCs) and snapshotCache (unloaded)
+// - Queue system:
+//    * LoadQueue: NPCs waiting to be loaded (priority-sorted)
+//    * UnloadQueue: NPCs waiting to be unloaded (distance-sorted)
+// - Process queues: handle max 20 load/unload operations per tick to avoid hitches
+// - Log transitions: "Unloaded Alice (farmer) at distance 60; Reloaded Bob (merchant) via faction call"
+//
+// Copilot can generate:
+//    struct NPCSnapshot { int id; Vector3 position; int faction_id; float loyalty; float mood; int last_tick; vector<Event> eventSchedule; }
+//    float relevanceScore(NPC npc, Player player, int currentTick, float w_dist=0.5, float w_event=0.3, float w_influence=0.2) { ... }
+//    void manageActiveSet(NPCRegistry& registry, Player player, int currentTick, int maxActive=200, int memoryLimitMB=150) { ... }
+//    void unloadNPC(NPC npc, NPCSnapshotCache& cache) { ... }
+//    NPC* reloadNPC(int npcId, NPCSnapshotCache& cache) { ... }
+//    void processLoadUnloadQueues(NPCRegistry& registry, LoadQueue& loadQ, UnloadQueue& unloadQ) { ... }
+
 ## 14. Data Loading & Persistence - Performance Optimized for 1000+ NPCs
 // Binary Save Format (for save files - FAST & EFFICIENT):
 // - Use binary format for all save files: compact, fast I/O, memory efficient (supports 1000+ NPCs)
@@ -1194,6 +1551,23 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Copilot can generate helper functions like:
 //    bool saveToBinary(string filename, NPCRegistry& registry, vector<Faction>& factions, ...);
 //    bool loadFromBinary(string filename, NPCRegistry& registry, vector<Faction>& factions, ...);
+//
+// Save File Versioning & Migration:
+// - Add format_version field to binary header (e.g., v1, v2, v3)
+// - Include migration functions: WorldState migrateV1_to_V2(WorldState oldState) { ... }
+// - Log all migrations in migration_log.json for debugging
+// - Warn player if loading older save: "This save is from v1. Converting to v3..."
+// - Enables iterative development without breaking existing player saves
+// - Copilot can generate:
+//    struct SaveFileHeader { int format_version; int tickNumber; string playerName; timestamp createdAt; }
+//    WorldState migrateV1_to_V2(WorldState old) { ... }
+//
+// Save/Load UI Experience:
+// - Save: "Game saved at {location} on {date/time}. NPCs: {count}, Factions: {count}, Game time: {season} Year {year}."
+// - Load: "Loading save: {filename}... [Migrating format if needed...] Loading NPCs: {progress}%... Ready!"
+// - Auto-save: Every 5 game minutes to auto_save.dat (never overwrite manual saves)
+// - Multiple saves: Allow player to maintain multiple slots (save_slot_1.dat, save_slot_2.dat, etc.)
+// - Quick resume: Last save auto-loads on game start (with option to skip or choose different save)
 // 
 // JSON Format (for human-editable config/scenario files ONLY - NOT for saves):
 // - Use JSON for initial scenario data files (not save files)
