@@ -201,7 +201,7 @@ The goal is to implement the deterministic simulation logic and data structures 
 
 ## 8. Proximity-Based Conversation System (NPC-Initiated)
 // Implement text conversation UI that triggers when NPC reaches player:
-// - NPCs continuously pathfind to player when they detect a problem (emotion/loyalty threshold exceeded)
+// - NPCs continuously pathfind to player when they detect a problem (severity threshold exceeded)
 // - Proximity range: ~5 units (tunable)
 // - Trigger: when distance(npc.position, player.position) < proximityRange AND NPC has unresolved problem:
 //    1. NPC reaches player proximity
@@ -218,8 +218,47 @@ The goal is to implement the deterministic simulation logic and data structures 
 //    - State 3: Player responds (decision typed or selected)
 //    - State 4: NPC reacts (loyalty updated, narrative feedback, simulation updates)
 //    - State 5: Conversation ends, NPC resumes activity (problem resolved or acknowledged)
-// - Each NPC has internal problem severity tracking; dialogue initiates when severity > threshold
-// - Multiple NPCs may reach player simultaneously; handle conversation queue or random selection
+// - Each NPC has internal problem severity tracking; dialogue initiates when severity > threshold (see Section 8a)
+// - Multiple NPCs may reach player simultaneously; handle via conversation queue with priority system (see Section 8a)
+
+## 8a. NPC Problem Severity Scoring & Proximity Queue Management
+// To determine when NPCs initiate dialogue and manage multiple simultaneous conversations:
+//
+// NPC Problem Severity Formula:
+// - severity = 0.5 × |mood_delta| + 0.5 × |loyalty_delta|
+//    * mood_delta = current_mood - previous_mood (NPC's emotional change this tick)
+//    * loyalty_delta = current_loyalty - previous_loyalty (NPC's loyalty toward player change this tick)
+//    * Both deltas are absolute values (magnitude matters, not direction)
+// - Example 1: Alice's mood drops 0.7 → 0.5 (delta -0.2), loyalty drops 0.8 → 0.7 (delta -0.1)
+//    * severity = 0.5 × 0.2 + 0.5 × 0.1 = 0.1 + 0.05 = 0.15
+// - Example 2: Bob's mood spikes 0.4 → 0.8 (delta +0.4), loyalty unchanged (delta 0)
+//    * severity = 0.5 × 0.4 + 0.5 × 0 = 0.2
+// - Threshold: if severity ≥ 0.3 → NPC recognizes problem and begins pathfinding to player
+// - Continuous check: severity recalculated every tick; NPCs may start/stop pathfinding based on changes
+//
+// Proximity Queue Management (Multiple NPCs Reaching Player):
+// - When NPCs reach player proximity simultaneously, queue them by priority
+// - Max queue length: 5 NPCs; overflow triggers random selection among overflow
+// - Priority scoring (in order):
+//    1. Problem severity (highest first): sort by severity score descending
+//    2. NPC faction influence: VIP/leaders override queue (priority boost +0.5 to severity for queue ranking)
+//    3. Distance to player: closer NPCs (distance < 3 units) get slight priority boost
+//    4. Time since last dialogue: NPCs with longest dialogue gap get priority
+//    5. Random tie-break (seeded): deterministic selection if all else equal
+// - Queue implementation:
+//    struct ConversationQueueEntry { int npcId; float priorityScore; int queuePosition; }
+//    priority_score = severity * w_severity + influence * w_influence + (1 - dist/5) * w_distance + (1 - timeSinceDialogue/maxTime) * w_time
+//    w_severity=0.4, w_influence=0.3, w_distance=0.15, w_time=0.15
+// - Conversation flow:
+//    1. Dequeue highest-priority NPC
+//    2. Execute conversation (player makes decision)
+//    3. Wait 2-5 seconds before showing next queued NPC
+//    4. Repeat until queue empty
+// - Copilot can generate:
+//    struct ConversationQueueEntry { int npcId; float severityScore; float influenceScore; int tickArrived; }
+//    float calculatePriority(NPC npc, Player player, vector<Decision> history) { ... }
+//    vector<ConversationQueueEntry> sortConversationQueue(vector<NPC> nearbyNPCs, Player player) { ... }
+//    void displayNextConversation(ConversationQueueEntry entry) { ... }
 
 ## 9. Player Movement & Input System
 // Implement player 3D movement and input handling:
@@ -236,15 +275,48 @@ The goal is to implement the deterministic simulation logic and data structures 
 //    - Turn counter and current time/season
 //    - Conversation history (optional)
 
-## 10. Typed Input Parsing
-// Implement player dialogue input parsing during conversations:
+## 10. Player Input Command Validation & Action Registry
+// Implement structured player input parsing with validated command registry:
+//
+// Action Registry (Extensible Command Definition):
+// - Central registry of all allowed simulation commands
+// - Each action defined with:
+//    * name: "allocate"
+//    * parameters: [target_resource, target_npc_or_faction, amount]
+//    * target_types: [RESOURCE, NPC_OR_FACTION, QUANTITY]
+//    * consequence_formula: reference to Equations.txt (e.g., "loyalty_delta = alpha * (amount / population)")
+//    * aliases: ["give", "distribute", "provide"] (for fuzzy matching)
+// - Example registry entry:
+//    {
+//      name: "allocate",
+//      aliases: ["give", "distribute", "provide", "help"],
+//      parameters: [{name: "resource", type: RESOURCE}, {name: "target", type: NPC_OR_FACTION}],
+//      consequenceFormula: "loyalty_delta = 0.05 * (amount / threshold)",
+//      description: "Allocate resources to NPCs or factions to improve morale and loyalty"
+//    }
+// - All actions stored in actionRegistry.json (human-editable, loaded at game start)
+// - Copilot can generate: struct ActionDefinition { string name; vector<string> aliases; vector<Parameter> parameters; string formula; string description; }
+//
+// Typed Input Parsing with Validation:
 // - Input Parsing Clarifications:
-//    - Use keyword-based mapping first: "feed people", "increase food", "allocate food" all -> increase food resource
-//    - Implement fuzzy matching for synonyms or related verbs (e.g., "help villagers" -> allocate food)
+//    - Use keyword-based mapping first: "feed people", "increase food", "allocate food" all -> allocate action
+//    - Implement fuzzy matching for synonyms or related verbs (e.g., "help villagers" -> allocate)
 //    - If input is ambiguous (matches multiple actions equally), prompt player:
-//      Example: "Your input matches multiple actions: [1] Increase food, [2] Talk to advisor. Please clarify."
-//    - Avoid freeform hallucination by always mapping typed input to known simulation actions
-//    - Copilot can generate: string parsePlayerInput(string input, vector<string> knownActions) { ... }
+//      Example: "Your input matches multiple actions: [1] Allocate food, [2] Delegate task. Please clarify."
+//    - Avoid freeform hallucination by always mapping typed input to known simulation actions (from registry)
+//    - Unknown commands: reject with feedback and suggest closest matches from registry
+// - Parsing flow:
+//    1. Parse player input: extract verb (allocate, delegate, negotiate, etc.) + parameters
+//    2. Look up verb in actionRegistry (exact + fuzzy match)
+//    3. Extract parameters (resource name, NPC name, faction name, quantity)
+//    4. Validate parameters exist in world (resource available, NPC exists, faction exists)
+//    5. If validation passes: convert to LLM call (for tone/context interpretation) OR direct simulation call
+//    6. If validation fails: prompt player for correction
+// - Commands parsed BEFORE world state update (ensure validated before execution)
+// - Copilot can generate:
+//    string parsePlayerInput(string input, ActionRegistry registry) { ... }
+//    ParseResult validateParameters(string action, vector<string> parameters, WorldState state) { ... }
+//    void rejectCommand(string command, vector<string> suggestions) { ... }
 
 ## 12. LLM Integration - Mandatory Dual-Role Architecture
 // LLM Backend Integration (from typed_input_guidelines.txt):
@@ -288,15 +360,102 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Neutral tone: minimal emotion shift
 // - Negative tone (T_negative): triggers fear, anger in affected NPCs
 
-## 12a. LLM Resource Management & Throttling
+## 12a. LLM API Configuration & Fallback Strategy
+// To enable reliable LLM integration with multiple providers and offline fallback:
+//
+// Supported LLM Providers:
+// - OpenAI (GPT-4, GPT-3.5): primary if available
+// - Local LLaMA (llama.cpp or similar): fallback for low-latency/offline scenarios
+// - Configuration: store provider selection + API keys in environment or config file (not hardcoded)
+// - Config file structure: {provider: "openai", api_key: "${OPENAI_API_KEY}", timeout: 10, max_retries: 3}
+//
+// API Key Management:
+// - Read from environment variables (first priority): OPENAI_API_KEY, LLAMA_API_URL
+// - Fallback to config file (project root): llm_config.json (human-editable, not version-controlled)
+// - Validate API key exists before making calls; warn if missing
+// - Never log or expose API keys in output
+//
+// Request Timeout & Retry Strategy:
+// - Timeout per request: 10 seconds (adjustable per call type: decision interpretation faster, narrative generation slower)
+// - Retry on timeout/network error: up to 3 attempts with exponential backoff (1s, 2s, 4s)
+// - On all retries exhausted: fall back to offline fallback (see below)
+// - Log retry attempts: "LLM call retry 2/3 after timeout"
+//
+// Token Usage Tracking:
+// - Track tokens consumed per call: input_tokens + completion_tokens
+// - Aggregate daily/weekly token usage for cost estimation
+// - Warn if usage exceeds budget threshold (e.g., 1M tokens/day costs ~$50)
+// - Store usage log in local file: llm_usage.json with timestamps and costs
+// - Copilot can generate: struct LLMUsage { int inputTokens; int completionTokens; float costUSD; timestamp createdAt; }
+//
+// Offline Fallback LLM (Deterministic, Reduced Creativity):
+// - When online LLM unavailable: use rule-based deterministic fallback
+// - Fallback generates plausible but formulaic narrative (no hallucination risk)
+// - Example: NPC emotion state → template string generator
+//   * High anger → "I can't take this anymore. We need action now."
+//   * High fear → "I'm worried. What if things get worse?"
+//   * High contentment → "Things are going well. Thank you for your leadership."
+// - Fallback maintains simulation integrity (still deterministic, reproducible)
+// - Copilot can generate: string generateOfflineNarrative(NPC npc, WorldState state) { ... }
+//
+// Copilot can generate:
+//   - class LLMProvider { virtual string callLLM(string prompt) = 0; virtual bool isAvailable() = 0; }
+//   - class OpenAIProvider : public LLMProvider { ... }
+//   - class LLaMAProvider : public LLMProvider { ... }
+//   - class OfflineFallback : public LLMProvider { ... }
+//   - struct LLMConfig { string provider; string apiKey; int timeoutSeconds; int maxRetries; }
+//   - LLMProvider* selectProvider(LLMConfig config);
+//   - void trackTokenUsage(int inputTokens, int completionTokens);
+
+## 12a2. Significant World State Change Thresholds
+// To define precise conditions for triggering LLM narrative generation:
+//
+// Per-NPC Mood Threshold:
+// - Track mood delta: current_mood - previous_tick_mood
+// - Trigger LLM if ANY NPC has |mood_delta| > 0.2 (significant emotional swing)
+// - Separate tracking: "negative deltas" (anxiety, sadness) vs "positive deltas" (anger, excitement)
+// - Example: Alice's mood drops from 0.6 → 0.35 (delta -0.25) → triggers snapshot
+//
+// Per-Faction Loyalty Threshold:
+// - Aggregate faction loyalty: sum all member loyalties / faction size
+// - Track faction_loyalty_delta: current_avg_loyalty - previous_avg_loyalty
+// - Trigger global LLM call if aggregate |faction_loyalty_delta| > 0.15
+// - Also track per-faction separately (not just aggregate)
+// - Example: Warrior faction average loyalty drops 0.7 → 0.52 (delta -0.18) → triggers snapshot
+//
+// Resource Scarcity Thresholds:
+// - Track each resource level against scarcity threshold
+// - Trigger if resource crossed scarcity: was_above_threshold && now_below_threshold
+// - Example: Food level 160 → 140 crosses scarcity (150) → triggers snapshot
+//
+// Event Probability Triggers:
+// - When events naturally trigger (from probability calculations) → immediate snapshot
+// - Example: Immigration event occurred, rebellion triggered, schism formed → instant LLM call
+//
+// Immigration/Emigration Events:
+// - Track NPC additions (immigrants, births) and removals (deaths, escapes)
+// - If net population change > 0 (immigration) → triggers snapshot with "new opportunities" narrative
+// - If net population change < 0 (emigration) → triggers snapshot with "crisis" narrative
+//
+// Aggregate Change Detection:
+// - Batch changes if multiple conditions true simultaneously
+// - Example: Food scarcity + 3 NPCs with mood delta >0.2 + faction conflict → ONE snapshot capturing all
+// - Prevents redundant LLM calls when multiple systems trigger at once
+//
+// Tracking Implementation:
+// - Copilot can generate:
+//    struct WorldStateSnapshot { vector<NPC> significantNPCs; vector<Faction> affectedFactions; vector<Resource> changedResources; vector<Event> triggeredEvents; int tickNumber; }
+//    bool hasSignificantWorldStateChange(WorldState current, WorldState previous) { ... }
+//    vector<WorldStateSnapshot> accumulateChanges(vector<WorldStateSnapshot> pending) { ... }
+
+## 12a3. LLM Resource Management & Throttling
 // To prevent overloading LLM APIs at scale (1000+ NPCs):
 //
 // Snapshot Batching (Event-Driven Narrative Generation):
-// - Frequency: ONLY when significant world state changes detected (not on timer)
-// - Significant changes: resource scarcity crossed, multiple mood deltas >0.2, faction conflict emerged, immigration triggered
-// - Batch size: snapshot includes only NPCs with significant mood/loyalty changes (delta > 0.2)
-// - Priority sampling: if >100 NPCs active, sample 50 most influential (leaders, rebels, immigrants)
-// - Caching: hash world state; reuse cached response if hash matches (avoids duplicate LLM calls)
+// - Frequency: ONLY when significant world state changes detected (see Section 12a2 thresholds)
+// - Batch size: snapshot includes only NPCs/factions with significant changes (delta > threshold)
+// - Priority sampling: if >100 NPCs active, sample 50 most influential (leaders, rebels, immigrants, high-impact NPCs)
+// - Caching: hash world state; reuse cached response if hash matches (avoids duplicate LLM calls within 5 minutes)
 // - Debouncing: if world state changes rapidly, batch changes into single LLM call (max 1 call per 10 ticks)
 //
 // Decision Interpretation (Reactive):
@@ -313,6 +472,115 @@ The goal is to implement the deterministic simulation logic and data structures 
 //   - struct SnapshotBatch { vector<int> npcIds; float significanceThreshold; }
 //   - bool shouldGenerateNarrative(int ticksSinceLastCall, int npcCount) { ... }
 //   - class LLMRateLimiter { int callsThisMinute; bool canCall(); void recordCall(); }
+
+## 12d. Asynchronous LLM Request Handling
+// To prevent blocking player input and manage concurrent LLM calls:
+//
+// LLM Request Queue Architecture:
+// - Maintain separate queues for different call types:
+//    * PlayerInputQueue (high priority, max 1 concurrent): player decisions must be fast
+//    * WorldStateNarrativeQueue (medium priority, max 1 concurrent): world state snapshots
+//    * NPCConversationQueue (low priority, max 3 concurrent): NPC-to-NPC dialogue (can run in parallel)
+// - Each queue entry: { callId, timestamp, npcIds, prompt, callbackFunction }
+//
+// Request Processing Strategy:
+// - Process PlayerInputQueue immediately (never wait)
+// - For WorldStateNarrativeQueue: if new request arrives while one pending
+//    → Drop old request (world state snapshot obsolete), queue new request (current state matters more)
+// - For NPCConversationQueue: queue all requests (up to 3 parallel)
+//    → If >3 pending: drop oldest requests (conversation between Alice-Bob less important than recent NPCs)
+// - Non-blocking: all LLM calls async; frame rendering continues while awaiting LLM response
+// - Callback system: when LLM completes, trigger OnLLMComplete(callId, response) to update NPC state
+//
+// Timeout & Fallback:
+// - PlayerInputQueue: 3s timeout (player expects quick feedback)
+// - WorldStateNarrativeQueue: 10s timeout (can be slower, non-blocking)
+// - NPCConversationQueue: 5s timeout (ambient, can afford some delay)
+// - If timeout: use offline fallback LLM (from Section 12a)
+// - If multiple timeouts in a row: suppress further LLM calls for 5 minutes, use rule-based fallback
+//
+// Deterministic Replay of LLM Calls:
+// - Log all LLM inputs & outputs per tick: "tick 1234: player_input='allocate food', llm_output={target: farmers, action: allocate}"
+// - Log all RNG decisions: "tick 1234: npc_selection=random_seed_42 selected npc_id=5"
+// - In replay mode: use logged LLM output instead of calling LLM again (ensures byte-identical outcomes)
+// - Enable frame-by-frame debugging: step through tick N, verify LLM result matches logged result
+//
+// Copilot can generate:
+//   enum QueuePriority { HIGH=0, MEDIUM=1, LOW=2 }
+//   struct LLMRequest { int callId; int timestamp; vector<int> npcIds; string prompt; function<void(string)> callback; QueuePriority priority; }
+//   class LLMRequestQueue { void enqueue(LLMRequest req); LLMRequest dequeue(QueuePriority p); void processAsync(); }
+//   void onLLMComplete(int callId, string response) { ... }
+//   void replayLLMCall(int tickNumber, string callType) { ... }
+
+## 12e. Deterministic Replay & Debugging
+// To enable frame-by-frame simulation replay with exact reproducibility:
+//
+// RNG Seeding Per Frame:
+// - Seed random number generator at start of each tick: srand(globalSeed + currentTick)
+// - All random decisions in that tick use this seeded RNG (deterministic within tick)
+// - Example: "tick 1234 with seed 42: npc_mood_variance uses rng, conversation_selection uses rng"
+// - Global seed stored in save file; replay uses same seed to reproduce identical sequence
+//
+// LLM Call Logging:
+// - Log every LLM call: { tick, callType, prompt, llmOutput, tokensUsed, duration }
+// - Store in replay log: replay_log.json or replay_log.bin
+// - Example entry: { tick: 1234, callType: "worldStateNarrative", prompt: "food scarcity...", llmOutput: "farmers report starvation...", tokens: 150 }
+// - In replay mode: load logged outputs; skip actual LLM calls
+//
+// Replay Mode Implementation:
+// - Argument: --replay save_file_path
+// - Load save file + replay log
+// - Simulate tick-by-tick: verify current_state_after_tick == logged_state_after_tick
+// - If mismatch: report divergence at tick N (indicates non-determinism bug)
+// - Debug output: display NPC positions, moods, loyalty values after each tick
+// - Frame-by-frame pause: press SPACE to step one tick, display detailed state changes
+//
+// Determinism Validation:
+// - Test: run same save file twice with same seed
+// - Compare: world states at tick N should be byte-identical
+// - Assertion: for all ticks N: state_run1[N] == state_run2[N]
+// - If assertion fails: identify which system introduced non-determinism (emotion calc, random selection, floating-point rounding)
+//
+// Copilot can generate:
+//   struct LLMCallLog { int tick; string callType; string prompt; string llmOutput; int tokensUsed; float duration; }
+//   class ReplaySystem { void recordTick(int tick, WorldState state, vector<LLMCallLog> llmCalls); void validateDeterminism(int tickNumber); void stepFrame(); }
+//   bool verifyDeterminism(string saveFile, int numRuns=2) { ... }
+//   void logDivergence(int tickNumber, string systemName, string detail) { ... }
+
+## 12f. Input Parsing Algorithm Refinements - Hybrid Confidence Scoring
+// To ensure consistent and refined fuzzy matching implementation:
+//
+// Confidence Calculation (Three-Component Hybrid Model):
+// - Levenshtein Distance Component:
+//    * maxDist = 3 (allow up to 3 character edits)
+//    * confidence_ld = max(0, 1.0 - (distance / maxDist))
+//    * Example: "feed" vs "food" (distance 2) → 1.0 - (2/3) = 0.667
+//
+// - Word Embedding Similarity (optional, for semantic matching):
+//    * Use cosine similarity of word embeddings (if embedding model available)
+//    * Threshold: 0.65 for semantic relevance
+//    * confidence_embedding = similarity_score (0-1)
+//    * Example: "help village" vs "support agriculture" (cosine 0.72) → 0.72
+//
+// - Exact Keyword Match:
+//    * confidence_exact = 1.0 if full string match to known action
+//    * confidence_exact = 0.95 if substring match (e.g., "allocate" in "allocate_food")
+//
+// - Hybrid Score Formula:
+//    * confidence = w_ld * confidence_ld + w_embedding * confidence_embedding + w_exact * confidence_exact
+//    * Default weights: w_ld=0.4, w_embedding=0.3, w_exact=0.3
+//    * Adjust weights based on feedback: prioritize exact > embedding > Levenshtein if embedding unavailable
+//
+// - Edge Cases:
+//    * If multiple actions tie exactly at same score: rank by frequency (most-used action first)
+//    * If single action within ±0.05 of second place: treat as ambiguous (present both)
+//    * Partial input (player types incomplete command): suggest 2-3 best matches, don't execute
+//
+// Copilot can generate:
+//   - float levenshteinDistance(string a, string b, int maxDist=3) { ... }
+//   - float hybridConfidence(string input, string action, float w_ld=0.4, float w_emb=0.3, float w_exact=0.3) { ... }
+//   - struct ParseResult { string action; float confidence; int usageFrequency; }
+//   - SortedMap<float, vector<ParseResult>> rankActionsByConfidence(string input) { ... }
 
 ## 12b. Error Handling & Fallback Logic
 // Detailed fallback cascade for failed LLM calls:
@@ -745,16 +1013,45 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Pause ambient conversations when LLM is busy with player-facing narrative generation
 // - Cache recently generated conversation topics to avoid repetitive exchanges
 //
-// Integration with Simulation State:
-// - Conversations stay purely ambient UNLESS:
-//    * Two NPCs arguing triggers faction tension (mood delta > 0.3)
-//    * Gossip spreads rumor that shifts cultural norms (religion/tradition topic)
-//    * NPC mentions resource shortage (world state already detected it)
-// - Conversations inform player-facing narrative indirectly: "People are worried about food" echoes ambient concerns
+// Integration with Simulation State (Cascade Triggers):
+// - Conversations stay purely ambient UNLESS cascade conditions are met:
+//    * Faction Tension Cascade: if |mood_delta| between two NPCs from same faction > 0.3 AND they're disagreeing
+//      → increase faction_tension score by 0.1; if faction_tension > 0.4 → trigger LLM for faction conflict narrative
+//    * Gossip Propagation: if conversation mentions resource shortage or faction rumor
+//      → calculate gossip_probability = conversation_sentiment * npc_social_influence
+//      → if gossip_probability > 0.6 → propagate to nearby NPCs within 20 units
+//      → rumor spreads and shifts cultural norms based on content (e.g., if negative about player → cultural alignment -0.05)
+//    * Shared Enemy/Goal Activation: if conversation reveals shared antagonist or objective
+//      → increase npc1-npc2 bond strength (for future cooperative actions)
+//      → flag as potential future alliance opportunity
+// - Otherwise: conversation has local effect only (dialogue stored, no state changes)
+// - Copilot can generate:
+//    bool shouldCascadeConversation(AmbientConversation conv, NPC npc1, NPC npc2) { ... }
+//    void propagateGossip(string rumor, Vector3 epicenter, float gossipProbability) { ... }
+//    float calculateFactionTension(vector<AmbientConversation> recentConversations, Faction f) { ... }
+//
+// Conversation Quality Control:
+// - Validate LLM dialogue coherence before storing:
+//    * Grammar check: basic syntax validation (no malformed sentences)
+//    * Context relevance score: does dialogue mention NPC names, location, or situation? (target score ≥ 0.7)
+//    * Sentiment consistency: does dialogue tone match NPC personality? (target score ≥ 0.7)
+//    * If quality_score < 0.7: reject and re-query LLM with same context
+//    * If re-query fails: use cached template dialogue instead
+//    * Max 3 rejections per NPC pair per game day; if exceeded, mark pair as "incompatible" and skip for 24 hours
+// - Copilot can generate:
+//    struct DialogueQualityScore { float grammarScore; float relevanceScore; float sentimentScore; float overallScore; }
+//    DialogueQualityScore evaluateDialogue(string npc1Dialogue, string npc2Dialogue, NPC npc1, NPC npc2, string location) { ... }
+//    string getTemplateDialogue(NPC npc1, NPC npc2, string topic) { ... }
+//
+// Conversation Storage & Display:
+// - Store generated conversations in circular buffer (max 100 recent conversations)
+// - Store as: struct AmbientConversation { NPCPair pair; string npc1_dialogue; string npc2_dialogue; int generatedTick; DialogueQualityScore quality; bool cascaded; }
+// - Display in ambient dialogue log or memory system (searchable history)
+// - NPCs occasionally reference past conversations: "Remember when we talked about..."
+// - Player can 'eavesdrop' on conversations to understand NPC concerns/relationships
 //
 // Copilot can generate:
 //   - struct NPCPair { int npcId1; int npcId2; int lastConversationTick; }
-//   - struct AmbientConversation { NPCPair pair; string npc1_dialogue; string npc2_dialogue; int generatedTick; }
 //   - void generateNPCPairConversation(NPC npc1, NPC npc2, string topic_hint) { ... }
 //   - bool shouldGenerateConversation(NPC npc1, NPC npc2, int currentTick) { ... }
 //   - void displayAmbientConversationLog(int maxRecent=50) { ... }
