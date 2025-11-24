@@ -1,0 +1,36 @@
+NPC & Advisor Profiles - Reference
+
+1. Attributes
+-------------
+- Name
+- Age
+- Gender
+- Background
+- Role/Occupation
+- Faction
+- Skills (e.g., agriculture, diplomacy, combat, education)
+- Ambition Level (0-1 scale)
+- Loyalty Level (0-1 scale)
+- Personality Traits (e.g., cautious, aggressive, ethical, pragmatic)
+
+2. Emotional States
+------------------
+- Immediate Emotion (anger, joy, fear, etc.)
+- Short-Term Mood (aggregated recent emotions)
+- Long-Term Attitude (toward player, factions, culture)
+
+3. Advisor-Specific Attributes
+------------------------------
+- Specialty (politics, military, culture, religion)
+- Influence Weight
+- Trust Level with Player
+- Faction Alignment
+- Agenda (short-term, long-term)
+- Risk Tolerance (0-1)
+- Strategy Style (manipulative, honest, persuasive)
+
+4. Behavioral Notes
+------------------
+- How NPCs/advisors react to player decisions
+- How they interact with other NPCs/factions
+- How they report issues or provide suggestions

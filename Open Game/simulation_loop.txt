@@ -1,0 +1,17 @@
+Simulation Loop & System Interaction
+
+1. Receive Issue
+2. Player Typed Decision
+3. LLM Interpretation
+4. Simulation Update:
+   - NPCs (emotions, loyalty, actions)
+   - Advisors (influence, advice)
+   - Factions (formation, strength, actions)
+   - Resources (production, allocation, consumption)
+   - Culture and Religion (evolution)
+   - Diplomacy (relations, negotiations)
+5. Narrative Feedback (LLM)
+6. Context/History Update
+7. Emergent Follow-Ups
+
+Loop repeats continuously for emergent gameplay

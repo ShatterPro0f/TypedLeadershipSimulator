@@ -1,0 +1,23 @@
+Event and Crisis Templates
+
+1. Event Types
+--------------
+- Environmental: floods, droughts, fires
+- Political: petitions, rebellions, coups
+- Economic: famine, shortages, trade disputes
+- Social/Cultural: festival, scandal, migration
+- Religious: schisms, conversions, rituals
+
+2. Event Probability
+--------------------
+P_event = BaseRate * product(ImpactFactor_i)
+Impact factors include:
+- Resource scarcity
+- NPC/faction discontent
+- Advisor influence
+- Cultural/religious tension
+
+3. Cascading Events
+------------------
+- Triggered when P_cascade > random(0,1)
+- Ripple effects affect multiple systems (factions, NPC loyalty, resources, diplomacy)

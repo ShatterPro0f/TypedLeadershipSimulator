@@ -1,0 +1,31 @@
+Resource and Economy Rules
+
+1. Resource Types
+-----------------
+- Food
+- Water
+- Materials (wood, stone, metal)
+- Tools
+- Knowledge/education points
+- Currency (if implemented)
+
+2. Production
+-------------
+Production_x = sum(worker_efficiency_i * base_output_x)
+
+3. Consumption
+--------------
+Consumption_x = sum(NPC_demand_i)
+
+4. Allocation
+-------------
+Allocation_x determined by player input or advisor delegation
+
+5. Resource Balance
+-------------------
+R_x(t+1) = R_x(t) + Production_x - Consumption_x - Allocation_x
+
+6. Resource Stress Index
+-----------------------
+RSI = Consumption_x / (Production_x + epsilon)
+RSI > 1 triggers scarcity, NPC unrest, or faction pressure

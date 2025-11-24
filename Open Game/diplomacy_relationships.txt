@@ -1,0 +1,20 @@
+Diplomacy and Relationships Rules
+
+1. Diplomatic Score
+------------------
+DOS = alpha * P_t + beta * R_f + gamma * M_s + delta * T_c
+- P_t = player negotiation tone
+- R_f = relation with foreign leader
+- M_s = mood of NPC/advisor
+- T_c = resource leverage/threats
+
+2. Relationship Adjustments
+---------------------------
+Delta R = DOS - Threshold
+Updates faction alignment and trust over time
+
+3. Interaction Rules
+-------------------
+- Soft diplomacy: cultural exchange, festivals, marriage alliances, aid
+- Hard diplomacy: threats, embargoes, ultimatums, espionage, military posturing
+- Leaders have personality, history, bias

@@ -1,0 +1,40 @@
+World State Tracker
+
+1. NPC Data
+-----------
+- Attributes: name, age, skills, loyalty, ambition, personality
+- Emotional States: immediate, short-term, long-term
+- Advisor Influence: specialty, trust, agenda
+
+2. Factions
+-----------
+- Members
+- Strength
+- Loyalty levels
+- Actions/events
+
+3. Culture & Religion
+--------------------
+- Traditions, norms
+- Rituals, festivals
+- Schisms, conversions
+
+4. Resources
+------------
+- Type
+- Quantity
+- Production
+- Consumption
+- Allocation
+
+5. Diplomacy
+------------
+- Relations between leaders/factions
+- Pending treaties, agreements
+- Conflicts or disputes
+
+6. Events
+---------
+- Active crises
+- Probabilities for cascading effects
+- Historical outcomes for reference

@@ -1,0 +1,21 @@
+Typed Input Interpretation Guidelines
+
+1. Player Input Extraction
+-------------------------
+- Target (NPC, faction, resource)
+- Action type (allocate, delegate, negotiate, inspire)
+- Priority/urgency
+- Tone/style (positive, neutral, negative)
+- Contextual references (previous decisions, ongoing crises)
+
+2. LLM Role
+-----------
+- Interpret input deterministically for simulation
+- Convert text into actionable parameters (resource changes, faction adjustments, NPC directives)
+- Identify ambiguous input and prompt for clarification if needed
+
+3. Output Format
+----------------
+- Simulation parameters for engine
+- Narrative flavor text for feedback
+- Optional recommendations for cascading or emergent events

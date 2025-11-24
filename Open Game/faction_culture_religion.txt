@@ -1,0 +1,23 @@
+Faction, Culture, and Religion Rules
+
+1. Factions
+-----------
+- Formation triggers: unmet needs, social tension, charisma
+- Structure: leaders, influencers, base, secret wings
+- Loyalty scoring: based on NPC attitudes, faction power, and cultural/religious alignment
+- Strength: sum of NPC loyalty * capability
+- Emergence: probability increases with discontent
+- Actions: petitions, sabotage, propaganda, rebellion
+
+2. Culture
+----------
+- Evolves dynamically: food, rituals, art, family, architecture, honor/shame
+- Cultural change influenced by NPC emotions, player decisions, faction pressure
+- Emergent traditions form organically
+
+3. Religion
+-----------
+- Evolution stages: superstition → rituals → priesthood → doctrine → schisms
+- Influences morality, social obligations, festivals, politics
+- Reacts to crises, player actions, and faction activity
+- Spread determined by attendance, player favor, crisis impact

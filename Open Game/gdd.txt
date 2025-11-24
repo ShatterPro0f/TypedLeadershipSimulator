@@ -1,0 +1,100 @@
+Open-World Typed Leadership Simulator - Game Design Document
+
+Title:
+[Working Title] – Open-World Typed Leadership Simulator
+
+1. Game Overview
+----------------
+Genre: Open-world, first-person, emergent simulation, text-driven leadership
+Core Concept: Players start as the leader of a small settlement, growing it into a thriving society entirely through typed decisions. NPCs, advisors, factions, and societies respond dynamically. Player influence is indirect.
+
+Key Features:
+- 3D open-world exploration
+- Typed input only; no menu selections
+- NPCs, advisors, factions react dynamically
+- Emergent simulation with cultural, religious, political, and factional systems
+- Deterministic outcomes; LLM provides narrative flavor
+- Multi-stage events and cascading consequences
+
+2. Core Gameplay Loop
+--------------------
+1. Issue Presentation: NPCs/advisors/factions present problems, context, and suggestions.
+2. Player Input: Freeform typed decisions.
+3. LLM Interpretation: Converts text into simulation instructions and narrative flavor.
+4. Simulation Execution: Updates NPCs, advisors, factions, resources, culture, religion.
+5. Narrative Feedback: Descriptive consequences of decisions.
+6. Context / History Update: Tracks unresolved issues, states, and evolution.
+7. Emergent Follow-Up: New problems/events arise; loop continues.
+
+3. Core Systems
+---------------
+- NPC Emotional Model
+- Advisors and Influence
+- Factions
+- Culture
+- Religion
+- Diplomacy
+- Security & Defense
+- Knowledge & Technology
+- Typed Decision System
+
+4. Emergent Gameplay
+-------------------
+- Cascading events, multi-stage crises, long-term consequences
+- NPC/advisor/faction memory of player style
+- Cultural and religious evolution influenced by player leadership
+
+5. Player Experience Goals
+-------------------------
+- Freedom: creative typed input
+- Immersion: realistic NPC/faction reactions
+- Emergence: independent evolution of culture, religion, factions
+- Strategy: balance resources, advisors, diplomacy, factions, culture
+- Role-Playing: leadership style affects world evolution
+
+6. Interface Design
+------------------
+- Message Window: Incoming issues with tone, context, suggested solutions
+- Player Input Field: Multi-line typed responses
+- Context / History Panel: Tracks unresolved issues, states, culture/religion, resources
+- Outcome Feed: Narrative feedback
+- Optional Visual Cues: Urgency, faction tension, advisor emphasis, resource changes
+
+7. Narrative & World Building
+-----------------------------
+- Dynamic world starting from a small settlement
+- NPCs with backstories, motivations, and faction affiliations
+- Emergent stories driven by decisions, faction politics, religion, diplomacy
+- LLM provides narrative flavor; simulation provides deterministic outcomes
+
+8. Conceptual Diagrams
+----------------------
+- Typed-Decision Loop Flowchart: Issue Presentation → Player Input → LLM Interpretation → Simulation Execution → Narrative Feedback → Context Update → Emergent Follow-Up
+
+9. Potential Expansion / DLC Ideas
+----------------------------------
+- New regions, cultures, factions
+- Random environmental events: floods, droughts, plagues
+- Unique advisors with story arcs
+- Advanced diplomacy with neighboring kingdoms
+- Secret societies, espionage, political intrigue
+
+10. Key Enhancements
+-------------------
+- Tone memory for NPC/faction reactions
+- Ambiguity consequences for vague input
+- Optional suggested solutions
+- Emergent multi-stage events
+- World awareness summaries for situational briefings
+
+11. Player Experience Flow
+--------------------------
+1. Read issue in message window
+2. Type response
+3. LLM interprets intent, tone, style
+4. Simulation executes consequences
+5. Narrative feedback displayed
+6. Context/history updates
+7. Emergent follow-ups appear → loop repeats
+
+End of GDD

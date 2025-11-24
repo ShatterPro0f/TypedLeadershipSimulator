@@ -1,0 +1,174 @@
+Open-World Typed Leadership Simulator - Algorithms and Equations
+
+---
+
+1. NPC Emotional Model
+
+---
+
+Immediate Emotion (E_i):
+E_i = f(T, R, P, S)
+Where:
+
+* T = tone of player input (positive/neutral/negative)
+* R = relevance of issue to NPC
+* P = personal preference/bias of NPC
+* S = social/faction pressure
+
+Short-Term Mood (M_s):
+M_s(t) = alpha * E_i + (1 - alpha) * M_s(t-1)
+(alpha = smoothing factor 0 < alpha < 1)
+
+Long-Term Attitude (A_l):
+A_l(t) = A_l(t-1) + beta * M_s(t)
+(beta = memory influence factor, e.g., 0.01-0.05)
+
+Action Probability (P_action):
+P_action(X) = sigmoid(gamma * A_l + delta * M_s + epsilon * E_i)
+(gamma, delta, epsilon = weights)
+
+---
+
+2. Advisor Influence Algorithm
+
+---
+
+Influence Score (I_a):
+I_a = theta_1 * T_a + theta_2 * R_a + theta_3 * P_a + theta_4 * F_a
+Where:
+
+* T_a = trust of advisor
+* R_a = relevance of issue
+* P_a = political alignment with player/factions
+* F_a = faction power backing advisor
+* theta_i = weighting factors
+
+Decision Filter: rank advisors by I_a and present top N suggestions to player.
+
+---
+
+3. Faction Dynamics
+
+---
+
+Faction Loyalty (L_f) per NPC:
+L_f = w_1 * A_l + w_2 * R_f + w_3 * E_f
+Where:
+
+* A_l = NPC attitude toward player
+* R_f = faction relevance to NPC goals
+* E_f = faction emotional influence
+* w_i = normalized weights
+
+Faction Strength (S_f):
+S_f = sum(L_f_i * C_i) for i in 1..N
+(C_i = NPC capability)
+
+Faction Emergence Probability (P_emerge):
+P_emerge = sigmoid(k * (1 - avg(L_f)))
+
+Faction Actions: triggered if S_f * (1 - A_l) > Threshold
+
+---
+
+4. Resource Allocation and Management
+
+---
+
+Resource Balance (R_x):
+R_x(t+1) = R_x(t) + Production_x - Consumption_x - Allocation_x
+
+Production:
+Production_x = sum(worker_efficiency_i * base_output_x)
+
+Consumption:
+Consumption_x = sum(NPC_demand_i)
+
+Resource Stress Index (RSI):
+RSI = Consumption_x / (Production_x + epsilon)
+(RSI > 1 => scarcity)
+
+---
+
+5. Culture and Religion Evolution
+
+---
+
+Cultural Change Probability (P_culture_change):
+P_culture_change = lambda_1 * E_i + lambda_2 * D_p + lambda_3 * F_c
+Where:
+
+* E_i = collective NPC emotional state
+* D_p = player decisions affecting traditions
+* F_c = faction pressure
+* lambda_i = influence weights
+
+Religion Influence (R_influence):
+R_influence = eta_1 * Attendance + eta_2 * PlayerFavor + eta_3 * CrisisImpact
+
+---
+
+6. Diplomacy Algorithm
+
+---
+
+Diplomatic Outcome Score (DOS):
+DOS = alpha * P_t + beta * R_f + gamma * M_s + delta * T_c
+Where:
+
+* P_t = player negotiation tone
+* R_f = relation with foreign leader
+* M_s = mood of foreign NPC/advisor
+* T_c = resource leverage / threats
+
+Adjustment to Relations (Delta R):
+Delta R = DOS - Threshold
+
+---
+
+7. Typed Decision Interpretation
+
+---
+
+LLM converts typed input into simulation parameters:
+
+* Target NPC/faction/resource
+* Action type (allocate, delegate, negotiate)
+* Priority/urgency
+* Tone/style (positive, neutral, negative)
+
+Output fed into deterministic algorithms for simulation.
+
+---
+
+8. Cascading Event Trigger Algorithm
+
+---
+
+Event Probability (P_cascade):
+P_cascade = BaseRate * product(ImpactFactor_i)
+ImpactFactors include:
+
+* Resource scarcity
+* NPC/faction discontent
+* Advisor influence
+* Cultural/religious stress
+
+Cascading event occurs if P_cascade > random(0,1)
+
+---
+
+9. Simulation Loop Summary
+
+---
+
+1. Receive Issue
+2. Typed Decision Input
+3. LLM Interpretation
+4. Simulation Update (NPC, advisors, factions, resources, culture, religion)
+5. Narrative Feedback
+6. Context/History Update
+7. Emergent Follow-Ups
+   Loop repeats
+
+All equations feed into deterministic simulation engine with LLM providing narrative flavor.
