@@ -2,20 +2,52 @@
 
 ## Overview
 This document provides detailed, structured instructions for GitHub Copilot to generate code for the Typed Leadership Simulator.  
-The game is a **3D first-person open-world emergent leadership simulation** with an LLM backend. The player leads a settlement, walking around a 3D world and encountering NPCs. When approaching an NPC, a text-based dialogue interface triggers where the player types freeform decisions. An LLM interprets typed input into deterministic simulation actions. NPCs, advisors, factions, culture, religion, diplomacy, and events respond dynamically with deterministic outcomes and LLM-generated narrative flavor.
+The game is a **3D first-person open-world emergent leadership simulation** with a **mandatory LLM backend**. The player leads a settlement that begins with ~10 NPCs and grows organically through immigration, family growth, and possible enslavement. The LLM is essential to core gameplay:
+
+1. **Interpreting player decisions**: Converts freeform typed commands into NPC actions and simulation parameters
+2. **Generating emergent narratives**: Receives periodic world state snapshots throughout the game day and creates plausible narrative issues/crises
+
+The LLM is **not optional**—it's baked into the core loop from day 1. The simulation generates deterministic consequences; the LLM generates narrative flavor and issue discovery.
 
 **Core Pillars:**
+- Start with ~10 NPCs; grow organically (immigration, births, enslavement)
 - 3D first-person open-world with player movement and NPC positioning
-- NPCs patrol, work, and gather at locations with spatial awareness
 - Proximity-based conversation triggers when player approaches NPC
-- Text-based dialogue system with freeform typed input (no menus)
-- LLM interprets typed commands into simulation parameters
-- Deterministic core mechanics (all equations from `/Open Game/`) with LLM narrative layer
+- LLM interprets typed player input → deterministic simulation parameters
+- LLM receives world state snapshots → generates narrative issues and crises
+- Deterministic consequence systems (all equations from `/Open Game/`) with LLM narrative layer
 - Emergent NPC/faction/cultural/religious systems
 - Cascading events with multi-stage consequences
-- Support for 1000+ NPCs with minimal hardware overhead
+- Performance-optimized for scaling 10 → 1000+ NPCs
 
-The goal is to implement the deterministic simulation logic and data structures from `/Open Game/` game design documents, with LLM integration for natural language processing and narrative generation.
+The goal is to implement the deterministic simulation logic and data structures from `/Open Game/`, with mandatory LLM integration for both decision interpretation and narrative generation.
+
+---
+
+## Initial Settlement & NPC Growth
+// Starting Conditions (from gdd.txt):
+// - Begin with ~10 NPCs (configurable in data/npcs.json)
+// - Each NPC has age, background, occupation, skills, faction affiliation
+// - Settlement starts with basic resources (food, wood, water)
+// - Player starts at center of 3D settlement world (x=0, y=0, z=0)
+//
+// Organic NPC Growth:
+// 1. Immigration: NPCs may join settlement based on:
+//    - Settlement reputation (influenced by player decisions)
+//    - Resource availability (food, housing)
+//    - Cultural/religious attractiveness
+// 2. Family Growth: NPCs can have children (born in-settlement, added to NPC registry)
+//    - Child age starts at 0; grows each year
+//    - When age >= 16, become adult NPC with own skills/role
+// 3. Enslavement: Enemy NPCs captured in conflict can be added as slaves
+//    - Slaves start with low loyalty, high resentment
+//    - Can escape or be freed (affects faction alignment)
+//
+// NPC Addition Mechanics:
+// - Create new NPC object, assign unique id, add to NPCRegistry
+// - Add to appropriate faction (or "unaffiliated" if immigrant)
+// - Notify LLM of settlement growth for narrative flavor
+// - Update world state snapshot
 
 ---
 
@@ -210,39 +242,106 @@ The goal is to implement the deterministic simulation logic and data structures 
 //    - Avoid freeform hallucination by always mapping typed input to known simulation actions
 //    - Copilot can generate: string parsePlayerInput(string input, vector<string> knownActions) { ... }
 
-## 11. LLM Integration for Typed Decision Interpretation
+## 12. LLM Integration - Mandatory Dual-Role Architecture
 // LLM Backend Integration (from typed_input_guidelines.txt):
-// - LLM converts freeform typed input into deterministic simulation parameters:
-//    1. Extract target (NPC, faction, resource, culture, religion)
-//    2. Extract action type (allocate, delegate, negotiate, inspire, suppress, etc.)
-//    3. Extract priority/urgency level
-//    4. Extract tone/style (positive, neutral, negative, aggressive, diplomatic)
-//    5. Identify contextual references (previous decisions, ongoing crises)
-// 
-// - LLM Output Format:
-//    - Simulation parameters (target ID, action type, resource amount, tone value)
-//    - Narrative flavor text (1-2 sentence description for player feedback)
-//    - Optional cascade recommendations (predicted secondary events)
-// 
-// - Implementation:
-//    - Call LLM API with prompt: player_input + context + known_actions + tone_guide
-//    - Parse LLM response into JSON: { target, action, tone, narrative, cascades }
-//    - Feed simulation parameters into deterministic algorithms (Equations.txt)
-//    - Append narrative text to simulation feedback
-// 
-// - Tone Mapping (from Equations.txt - immediateEmotion calculation):\n//    - Positive tone (T_positive): increases E_i for favorable NPCs, decreases for rivals\n//    - Neutral tone: minimal emotion shift\n//    - Negative tone (T_negative): triggers fear, anger in affected NPCs
+// The LLM is MANDATORY and has two distinct responsibilities:
+//
+// ROLE 1: Decision Interpretation (Reactive)
+// ============================================
+// - LLM converts freeform typed input into deterministic simulation parameters
+// - Receives: player_input + context (current crisis, world state, known actions)
+// - Extracts:
+//    1. Target (NPC ID, faction ID, resource type, cultural aspect)
+//    2. Action type (allocate, delegate, negotiate, inspire, suppress, command, etc.)
+//    3. Priority/urgency level
+//    4. Tone/style (positive, neutral, negative, aggressive, diplomatic)
+//    5. Contextual references (previous decisions, ongoing crises)
+// - Output: { target, action, tone, priority, narrative_flavor }
+// - Passes simulation parameters to deterministic algorithms (Equations.txt)
+// - Appends narrative_flavor to simulation feedback
+//
+// ROLE 2: Narrative Issue Generation (Proactive)
+// ===============================================
+// - LLM receives PERIODIC world state snapshots (e.g., every 10-30 game minutes)
+// - Snapshot contains: NPC emotions/moods, faction loyalty levels, resources, events, culture/religion state
+// - LLM analyzes and generates narrative issues/crises to present to player
+// - Output: array of narrative issues with implied action types
+// - Examples:
+//    * High food scarcity → "Farmers report starvation. Consider rationing or hunting."
+//    * Faction rebellion probability high → "Warriors grow restless. Military morale declining."
+//    * Religious schism forming → "Doctrinal conflict between two priest factions. Social tension rising."
+// - Issues feed into main loop; player responds to LLM-generated crises
+//
+// Implementation:
+// - LLM API calls (e.g., OpenAI, local LLaMA): async/non-blocking
+// - Decision interpretation: fast response needed (1-3 seconds)
+// - Narrative generation: can be slower (5-30 seconds background task)
+// - Cache LLM responses to avoid redundant calls
+// - Fallback to rule-based issue generation if LLM unavailable
+//
+// Tone Mapping (from Equations.txt - immediateEmotion calculation):
+// - Positive tone (T_positive): increases E_i for favorable NPCs, decreases for rivals
+// - Neutral tone: minimal emotion shift
+// - Negative tone (T_negative): triggers fear, anger in affected NPCs
 
-## 12. Main Simulation Loop
+## 13. Main Simulation Loop - With Periodic LLM Narrative Generation
 // Implement main loop (from simulation_loop.txt):
-// Steps:
-// 1. Display issues or problems reported by NPCs, advisors, or factions
-// 2. Accept typed input from player
-// 3. Parse input and convert to simulation instructions
-// 4. Update NPCs, advisors, factions, resources, culture, religion, and events
-// 5. Trigger random or conditional events
-// 6. Provide narrative feedback summarizing results of player decisions
-// 7. Update context/history log for future reference
-// 8. Repeat loop indefinitely for emergent gameplay
+// Loop structure: Tick → Update → Narrative Generation → Present Issues → Wait for Input
+//
+// Step 1: Advance Game Time
+//    - Increment turn counter
+//    - Update game time/season (e.g., every 10 ticks = 1 game hour; 24 hours = 1 day)
+//    - Trigger time-based events (seasons, birthdays, immigration checks)
+//
+// Step 2: Update Simulation Systems
+//    - Update NPC positions (pathfinding, activity changes)
+//    - Update NPC emotions/moods/attitudes
+//    - Update resource production/consumption/scarcity
+//    - Update faction strength/loyalty/rebellion probability
+//    - Trigger random events (check event probabilities)
+//    - Check cascade conditions
+//
+// Step 3: Periodic LLM Narrative Generation (e.g., every 10-30 game ticks)
+//    - Create world state snapshot: { npcs[], factions[], resources[], events[], culture, religion }
+//    - Call LLM: "Given this world state, what crises or opportunities are emerging? Format as narrative issues."
+//    - LLM returns: array of narrative issues with suggested action types
+//    - Store issues in queue; add to presentation stack
+//
+// Step 4: Present Issues to Player
+//    - Display most urgent/relevant issues from LLM-generated queue
+//    - Show NPC who triggered conversation (if proximity)
+//    - Show NPC's immediate problem (from their reportIssue() method)
+//    - Show LLM-generated narrative context
+//    - Example output:
+//      "[DIALOGUE] Alice (Farmer): 'We're running out of food!'
+//       [CONTEXT] Farmer faction morale: -2. Food scarcity probability: 85%. Consider rationing or trade."
+//
+// Step 5: Accept Typed Player Input
+//    - Wait for player to type decision
+//    - Timeout: if no input for N seconds, generate suggested actions via LLM
+//
+// Step 6: LLM Decision Interpretation (Reactive)
+//    - Call LLM: "Player typed: '{input}'. Convert to action. Context: {world_state}. Known actions: {action_list}."
+//    - LLM returns: { target, action, tone, priority, narrative_feedback }
+//    - Parse into simulation parameters
+//
+// Step 7: Execute Simulation Consequences
+//    - Update NPC emotions/loyalty based on tone and action
+//    - Update resource allocations
+//    - Recalculate faction loyalties/probabilities
+//    - Check for cascading events
+//    - Update culture/religion state
+//
+// Step 8: Narrative Feedback
+//    - Combine deterministic simulation results with LLM narrative_feedback
+//    - Display: "You allocated extra food. Alice's loyalty +2. Farmer faction +1. Warriors concerned about militia supplies. Food: 120 → 80."
+//    - Store decision in history log (for LLM context on future turns)
+//
+// Step 9: Cleanup
+//    - If NPC in conversation, unfreeze (resume activity)
+//    - Age NPCs (birthdays, children born)
+//    - Check immigration/emigration
+//    - Loop back to Step 1
 ## 13. Data Loading & Persistence - Performance Optimized for 1000+ NPCs
 // Binary Save Format (for save files - FAST & EFFICIENT):
 // - Use binary format for all save files: compact, fast I/O, memory efficient (supports 1000+ NPCs)
