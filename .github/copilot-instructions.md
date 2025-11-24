@@ -12,7 +12,7 @@ The LLM is **not optional**—it's baked into the core loop from day 1. The simu
 **Core Pillars:**
 - Start with ~10 NPCs; grow organically (immigration, births, enslavement)
 - 3D first-person open-world with player movement and NPC positioning
-- Proximity-based conversation triggers when player approaches NPC
+- NPCs detect problems and pathfind to player for dialogue (continuously, not on schedule)
 - LLM interprets typed player input → deterministic simulation parameters
 - LLM receives world state snapshots → generates narrative issues and crises
 - Deterministic consequence systems (all equations from `/Open Game/`) with LLM narrative layer
@@ -199,23 +199,27 @@ The goal is to implement the deterministic simulation logic and data structures 
 // - Proximity detection: when player.position within ~5 units of NPC.position, trigger initiateConversation()
 // - Player position: store player's current (x, y, z) and velocity vector for smooth movement
 
-## 8. Proximity-Based Conversation System
-// Implement text conversation UI that triggers when player approaches NPC:
+## 8. Proximity-Based Conversation System (NPC-Initiated)
+// Implement text conversation UI that triggers when NPC reaches player:
+// - NPCs continuously pathfind to player when they detect a problem (emotion/loyalty threshold exceeded)
 // - Proximity range: ~5 units (tunable)
-// - Trigger: when distance(player.position, npc.position) < proximityRange:
-//    1. Freeze NPC at current location (currentActivity = IN_CONVERSATION)
-//    2. Display text dialogue window with NPC name and message
-//    3. Show player dialogue options (typed input or menu)
-//    4. Parse player decision
-//    5. Execute updateState() on NPC, update simulation
-//    6. Unfreeze NPC, resume activity
+// - Trigger: when distance(npc.position, player.position) < proximityRange AND NPC has unresolved problem:
+//    1. NPC reaches player proximity
+//    2. Freeze NPC at current location (currentActivity = IN_CONVERSATION)
+//    3. Display text dialogue window with NPC name and problem statement
+//    4. Show player dialogue options or wait for typed input
+//    5. Parse player decision via LLM or fuzzy matching
+//    6. Execute deterministic updates to NPC state, simulation state
+//    7. Unfreeze NPC, resume activity
 // - Conversation state machine:
-//    - State 0: Not conversing
-//    - State 1: NPC initiates conversation (shows opening issue/greeting)
-//    - State 2: Player responds (decision typed or selected)
-//    - State 3: NPC reacts (loyalty updated, narrative feedback)
-//    - State 4: Conversation ends, NPC resumes activity
-// - Each NPC can only initiate conversation once per N turns (cooldown)
+//    - State 0: Not conversing (NPC has no unresolved problem)
+//    - State 1: NPC pathfinding to player (problem severity exceeded threshold)
+//    - State 2: NPC reached proximity (frozen, waiting for player response)
+//    - State 3: Player responds (decision typed or selected)
+//    - State 4: NPC reacts (loyalty updated, narrative feedback, simulation updates)
+//    - State 5: Conversation ends, NPC resumes activity (problem resolved or acknowledged)
+// - Each NPC has internal problem severity tracking; dialogue initiates when severity > threshold
+// - Multiple NPCs may reach player simultaneously; handle conversation queue or random selection
 
 ## 9. Player Movement & Input System
 // Implement player 3D movement and input handling:
@@ -287,11 +291,13 @@ The goal is to implement the deterministic simulation logic and data structures 
 ## 12a. LLM Resource Management & Throttling
 // To prevent overloading LLM APIs at scale (1000+ NPCs):
 //
-// Snapshot Batching (Proactive Narrative Generation):
-// - Frequency: every 1 game day (not per tick) to limit LLM calls
+// Snapshot Batching (Event-Driven Narrative Generation):
+// - Frequency: ONLY when significant world state changes detected (not on timer)
+// - Significant changes: resource scarcity crossed, multiple mood deltas >0.2, faction conflict emerged, immigration triggered
 // - Batch size: snapshot includes only NPCs with significant mood/loyalty changes (delta > 0.2)
 // - Priority sampling: if >100 NPCs active, sample 50 most influential (leaders, rebels, immigrants)
 // - Caching: hash world state; reuse cached response if hash matches (avoids duplicate LLM calls)
+// - Debouncing: if world state changes rapidly, batch changes into single LLM call (max 1 call per 10 ticks)
 //
 // Decision Interpretation (Reactive):
 // - Frequency: only on player input (inherently bounded)
@@ -371,56 +377,91 @@ The goal is to implement the deterministic simulation logic and data structures 
 //   - float calculateConfidence(string input, string knownAction) { ... }
 //   - vector<ParseResult> parseWithAmbiguity(string input, float threshold=0.7) { ... }
 
-## 12d. Time & Turn Scaling - Concrete Timing System
-// To ensure Copilot generates consistent time progression:
+## 12d. Continuous Real-Time Architecture - Event-Driven, Not Schedule-Based
+// To ensure Copilot generates continuous simulation without time-based event schedules:
 //
-// Time Units (Game Time):
-// - 1 Tick = 1 minute (in-game time)
-// - 1 Hour = 60 ticks
-// - 1 Day = 24 * 60 = 1440 ticks
-// - 1 Year = 365 days = 525,600 ticks
-// - 1 Season = 90 days = ~129,600 ticks
+// Core Principle: EVERYTHING IS EVENT-DRIVEN, NOT TIME-BASED
+// - Updates happen EVERY TICK for all systems
+// - Actions trigger based on CONDITIONS, not calendar times
+// - Example: Don't do "if (tickCounter % 1440 == 0) update emotions"
+//   Instead: Update emotions every tick; significant changes trigger world state snapshot and LLM call
 //
-// Turn Counter (for simulation logic):
-// - Increment turn counter every 10 ticks
-// - 1 "turn" = 10 minutes (in-game)
-// - NPCs update emotions/activities every turn
-// - Events check probabilities every turn
+// Game Time Units (For Reference/Display Only):
+// - 1 Tick = represents continuous game time progression (tunable: ~16ms real-time per tick for 60fps)
+// - 1 Minute (game) = X ticks (tunable; recommend: 10 ticks ≈ 1 game minute for readable pacing)
+// - 1 Hour = ~600 ticks
+// - 1 Day = ~14,400 ticks (used only for narrative pacing, NOT for event triggers)
+// - 1 Year = ~5,256,000 ticks (used only for aging, NOT for scheduled checks)
 //
-// LLM Narrative Generation Frequency:
-// - Generate narrative snapshot every 1440 ticks (1 game day)
-// - Cue: if (tickCounter % 1440 == 0) { callLLMForNarrative(); }
-// - World state changes tracked throughout day; snapshot captures daily aggregate
+// Main Continuous Loop (Every Tick - No Schedules):
+//   void simulationTick(float deltaTime) {
+//     tickCounter++;
+//     gameTime += deltaTime;  // Continuous time progression
 //
-// NPC Growth Events (Periodic Checks):
-// - Immigration check: every 7 days (10,080 ticks)
-// - Birthdays/aging: every 1 year (525,600 ticks)
-// - Faction rebellion check: every 1 day (1440 ticks)
-// - Resource production/consumption: every 1 day (1440 ticks)
+//     // Update ALL NPCs continuously (every single tick)
+//     for (NPC npc : activeNPCs) {
+//       updateNPCPosition(npc);         // Pathfinding - one step at a time
+//       updateNPCEmotion(npc);          // Emotions update continuously based on world state
+//       updateNPCActivity(npc);         // Activity (WORKING, PATROLLING, etc.) based on current state
+//     }
 //
-// Example Turn Structure (per tick):
-//   if (tickCounter % 1 == 0) {  // Every 1 minute
-//     updateNPCPositions();
-//     checkProximityCues();
+//     // Continuous Condition Checks (not time-based, executed every tick):
+//     checkProximityToPlayer();           // Check if any NPC reached player
+//     checkForSignificantWorldStateChanges();  // Monitor for state deltas
+//
+//     // Event-Driven Triggers (NOT scheduled - triggered by conditions):
+//     if (significantWorldStateChangeDetected()) {
+//       [Async] callLLMForNarrativeGeneration();  // Call WHEN state changes, not on timer
+//     }
+//     if (immigrationConditionsMet()) {          // Check continuously, trigger when ready
+//       processImmigration();
+//     }
+//     if (npcBirthdayReached()) {                 // Check continuously, age occurs naturally
+//       promoteChildToAdult();
+//     }
+//     if (factionRebellionThresholdExceeded()) {  // Check continuously, happens when probability high
+//       triggerFactionRebellion();
+//     }
 //   }
-//   if (tickCounter % 10 == 0) {  // Every 10 minutes (1 turn)
-//     updateNPCEmotions();
-//     checkEventProbabilities();
-//   }
-//   if (tickCounter % 1440 == 0) {  // Every 1 day
-//     callLLMForNarrativeGeneration();
-//     updateResourceProduction();
-//   }
-//   if (tickCounter % 10080 == 0) {  // Every 7 days
-//     checkImmigration();
-//   }
 //
-// Copilot can generate:
-//   - const int TICK_DURATION_MINUTES = 1;
-//   - const int TICKS_PER_HOUR = 60;
-//   - const int TICKS_PER_DAY = 1440;
-//   - bool isTimeForNarrativeGeneration(int tickCounter) { return tickCounter % 1440 == 0; }
-//   - bool isTimeForEvent(int tickCounter, EventType type) { ... }
+// World State Monitoring (Continuous, Not Scheduled):
+// - Track previous world state each tick
+// - Detect SIGNIFICANT changes (deltas, not calendar):
+//    * Resource level crossed scarcity threshold
+//    * Multiple NPCs' mood deltas > 0.2 in recent ticks (not per day, per update)
+//    * Faction loyalty shifted significantly (not daily, continuously checked)
+//    * Event occurred naturally from probabilities
+//    * Immigration condition became true (checked every tick)
+//    * Religious schism probability exceeded threshold
+// - If significant change detected: trigger LLM snapshot call (async, non-blocking)
+//
+// Continuous Time Reference (for narrative/UI purposes only):
+// - Copilot can generate:
+//    const float TICKS_PER_GAME_MINUTE = 10.0f;  // Tunable
+//    const int TICKS_PER_HOUR = 600;
+//    const int TICKS_PER_DAY = 14400;
+//    const int TICKS_PER_YEAR = 5256000;
+//    
+//    string getGameTimeString(int tickCounter) { 
+//      int minutes = (int)((tickCounter / TICKS_PER_GAME_MINUTE) % 60);
+//      int hours = (int)(((tickCounter / TICKS_PER_GAME_MINUTE) / 60) % 24);
+//      int days = (int)((tickCounter / TICKS_PER_GAME_MINUTE) / 1440);
+//      return format("%02d:%02d (Day %d)", hours, minutes, days);
+//    }
+//    
+//    // Example: Return NPC age and check if birthday (birthday happens when this tick is reached)
+//    bool hasNPCBirthdayThisTick(NPC npc, int currentTick) {
+//      int ageInTicks = currentTick - npc.creationTick;
+//      int yearInTicks = TICKS_PER_YEAR;
+//      return (ageInTicks % yearInTicks == 0) && (ageInTicks > 0);
+//    }
+//
+// Key Differences from Turn-Based:
+// - No "every 10 ticks update emotions" → emotions update continuously
+// - No "every 1440 ticks call LLM" → LLM called when world state significantly changes
+// - No "every 7 days check immigration" → immigration checked every tick, happens when conditions met
+// - No "every year age NPCs" → aging checked every tick, happens when birthday reached
+// - Result: Simulation is responsive, organic, unpredictable (but reproducible with same seed)
 
 ## 12e. Input Parsing Algorithm Refinements - Hybrid Confidence Scoring
 // To ensure consistent and refined fuzzy matching implementation:
@@ -663,75 +704,112 @@ The goal is to implement the deterministic simulation logic and data structures 
 //   - string formatDialogue(NPC npc, Player player) { ... }
 //   - void displayHelpMenu(string topic) { ... }
 
-## 13. Main Simulation Loop - With Periodic LLM Narrative Generation
-// Implement main loop (from simulation_loop.txt):
-// Loop structure: Tick → Update → Narrative Generation → Present Issues → Wait for Input
+## 13. Main Simulation Loop - Continuous Real-Time Event-Driven Architecture
+// Implement main loop (from simulation_loop.txt, adapted for continuous real-time):
+// Loop structure: Tick → Update All Systems → Check Conditions → Event-Driven Triggers → Render
 //
-// Step 1: Advance Game Time
-//    - Increment tick counter and turn counter
-//    - Update game time/season (calculate hour/day/year from tick counter)
-//    - Check periodic events: immigration (every 10,080 ticks), aging (every 525,600 ticks), faction rebellion (daily)
+// Core Loop (Every Frame/Tick):
+// ```
+// While (game running):
+//   Tick 1:
+//     Update ALL NPC positions (continuous pathfinding)
+//     Update ALL NPC emotions/moods/attitudes (continuous based on world state)
+//     Update NPC activities (based on current task state)
+//     Check: Is any NPC within proximity to player?
+//       If yes → initiate dialogue
+//     Snapshot world state and check for significant changes
+//       If significant change → [Async] call LLM for narrative generation
+//     Check: Do any immigration conditions hold true?
+//       If yes → process immigration
+//     Check: Has any NPC reached birthday?
+//       If yes → age them/promote child to adult
+//     Check: Does any faction meet rebellion threshold?
+//       If yes → trigger faction rebellion
+//     Render current frame
+//   Tick 2: (Repeat, no schedules)
+// ```
 //
-// Step 2: Update Simulation Systems (every 10 ticks = every turn)
-//    - Update NPC positions (pathfinding, activity changes)
-//    - Update NPC emotions/moods/attitudes using emotional model equations
-//    - Update resource production/consumption (daily aggregation)
-//    - Update faction strength/loyalty/rebellion probability
-//    - Trigger random events (check event probabilities)
-//    - Check cascade conditions for cascading crises
+// Step 1: Update NPC Positions (Every Tick)
+//    - For each active NPC: pathfind one step toward current destination
+//    - If NPC has detected a problem (emotion/mood threshold exceeded):
+//      → Pathfind toward player location
+//    - If NPC reached destination: determine next activity
+//    - Collision detection: prevent NPCs from walking through player/obstacles
 //
-// Step 3: Periodic LLM Narrative Generation (every 1440 ticks = every game day)
-//    - Condition: if (tickCounter % 1440 == 0)
-//    - Create world state snapshot: batch NPCs with delta mood > 0.2, sample top 50 if >100 active
-//    - Call LLM (with 3-second timeout): "Given this world state snapshot, what crises/opportunities are emerging?"
-//    - LLM returns: array of narrative issues with suggested action types
-//    - Cache response with world state hash for 30 minutes (avoid duplicate calls)
-//    - On LLM failure: use Fallback Tier 1-3 logic (timeout → cached response; API error → retry+rule-based; malformed → default)
-//    - Store issues in priority queue; flag most urgent for presentation
+// Step 2: Update NPC Emotions/Moods/Attitudes (Every Tick, Continuous)
+//    - Monitor world state changes (resource levels, faction events, player decisions)
+//    - For each NPC affected by changes:
+//      → Calculate immediateEmotion E_i based on change
+//      → Update shortTermMood M_s(t) = α·E_i + (1-α)·M_s(t-1)
+//      → Update longTermAttitude A_l(t) = A_l(t-1) + β·M_s(t)
+//    - Emotions update continuously, not on schedule
+//    - Mood changes drive NPC behavior (problem detection)
 //
-// Step 4: Present Issues to Player
-//    - If NPC proximity triggered conversation: show NPC's name and immediate problem (reportIssue())
-//    - Otherwise: show top 2-3 LLM-generated narrative issues from queue
-//    - Display context: affected faction/resource/event, current values, mood/loyalty deltas
-//    - Example output:
-//      "[DIALOGUE] Alice (Farmer): 'We're running out of food!'
-//       [CONTEXT] Food: 120 → 85 (scarcity threshold 50). Farmer faction morale: 0.5. Player reputation: +2."
+// Step 3: Check Problem Severity & NPC Dialogue Initiation
+//    - For each NPC, check if problem severity exceeds threshold:
+//      → If mood < 0.3 (anxious/sad) OR mood > 0.8 (angry) OR faction loyalty dropped
+//      → NPC recognizes problem and begins pathfinding to player
+//    - When NPC reaches proximity (<5 units):
+//      → Initiate dialogue: "[NPC]: I have a problem: {issue}"
+//      → Freeze NPC in conversation state
+//      → Wait for player typed input
 //
-// Step 5: Accept Typed Player Input (no timeout, but suggest actions if idle >30 seconds)
-//    - Wait for player to type decision
-//    - Parse input using confidence scoring (>0.9 execute, 0.7-0.89 confirm, 0.6-0.8 disambiguate, <0.6 rephrase)
-//    - If parsing confidence < 0.7: show clarification prompt with top 3 matching actions
+// Step 4: Check for Significant World State Changes (Every Tick)
+//    - Compare current state to previous tick:
+//      * Food level crossed scarcity (150 → 80)?
+//      * Mood deltas on multiple NPCs > 0.2?
+//      * Faction loyalty shifted > 0.1?
+//      * Event naturally triggered by probability?
+//      * Immigration/emigration condition became true?
+//    - If significant change detected:
+//      → Create lightweight world state snapshot
+//      → [Async, non-blocking] Call LLM: "What emerging crises/opportunities from this state?"
+//      → LLM returns narrative issues
+//      → Add to player-visible issue queue
+//      → Player sees issues next time they check or next NPC initiates dialogue
 //
-// Step 6: LLM Decision Interpretation (Reactive - 3-second timeout, no caching)
-//    - Call LLM: "Player typed: '{input}'. Context: {current_crisis}. Convert to: {target, action, tone, priority}. Known actions: {list}."
-//    - LLM returns: { target (NPC/faction/resource), action (allocate/delegate/inspire/suppress), tone (positive/neutral/negative), priority (0-10) }
-//    - On LLM failure: use local keyword-based parsing (fuzzy match to known actions)
+// Step 5: Player Input & LLM Decision Interpretation (When Player Speaks)
+//    - Player types: "allocate food to farmers"
+//    - [LLM Call, 3-sec timeout] Convert to: { target: "farmers", action: "allocate", tone: "positive" }
+//    - If LLM timeout: use local keyword-based parsing (fuzzy match)
 //    - Parse into deterministic simulation parameters
 //
-// Step 7: Execute Simulation Consequences
-//    - Apply deterministic updates using equations from Equations.txt:
-//      * Update target NPC: immediateEmotion E_i based on tone
-//      * Smooth to shortTermMood: M_s(t) = α·E_i + (1-α)·M_s(t-1)
-//      * Update longTermAttitude: A_l(t) = A_l(t-1) + β·M_s(t)
+// Step 6: Execute Deterministic Simulation Consequences (On Player Input)
+//    - Apply updates using equations from Equations.txt:
+//      * Update target NPC: E_i based on tone
+//      * Smooth to M_s: M_s(t) = α·E_i + (1-α)·M_s(t-1)
+//      * Update A_l: A_l(t) = A_l(t-1) + β·M_s(t)
 //      * Update faction loyalties: L_f = w₁·A_l + w₂·R_f + w₃·E_f
-//      * Apply resource changes: allocate/consume based on action
+//      * Apply resource changes: allocate/consume
 //      * Recalculate faction strength: S_f = Σ(L_f_i · C_i)
 //      * Check for cascading events
-//      * Update culture/religion state if action affects doctrine/norms
-// - All updates are deterministic and reproducible (same seed → same state)
+//    - All updates deterministic and reproducible (same seed = same state)
 //
-// Step 8: Narrative Feedback
+// Step 7: Narrative Feedback
 //    - Combine deterministic results with LLM narrative_feedback
-//    - Display: "[RESULT] You allocated extra food. Alice's loyalty +2. Farmer faction +1. Warriors concerned about supplies. Food: 120 → 80. Morale: +2."
-//    - Store decision in decision history log (for LLM context on future snapshots)
-//    - Update world state for next snapshot batch
+//    - Display: "[RESULT] You allocated extra food. Alice's loyalty +2. Farmer faction +1."
+//    - Store decision in history log (for LLM context on future snapshots)
+//    - Update world state for continuous monitoring
 //
-// Step 9: Cleanup & Loop
-//    - If NPC in conversation: unfreeze and resume activity
-//    - Age children (if they reach 16, promote to adult NPC with skills/role)
-//    - Check immigration/emigration conditions
+// Step 8: Continuous Event Checks (Every Tick, Not Scheduled)
+//    - Immigration: Check continuously if conditions met; process when true
+//    - Aging: Check if any NPC reached birthday; promote children when they turn 16
+//    - Faction rebellion: Check if faction strength × (1 - loyalty) exceeds threshold; trigger if true
+//    - Resource consumption: Happens continuously (food depletes gradually, not in chunks)
+//    - All triggers are state-based, not time-based
+//
+// Step 9: Cleanup & Next Tick
+//    - If NPC in conversation: unfreeze and resume activity when dialogue ends
 //    - Log all changes to replay system for debugging
-//    - Loop back to Step 1 (increment tick counter)
+//    - Increment tick counter
+//    - Loop back to Step 1 (continuous real-time)
+//
+// Key Characteristics:
+// - Continuous: All systems update every tick
+// - Event-driven: Triggers based on conditions, not calendar
+// - Responsive: NPCs initiate dialogue when problems reach critical severity
+// - Organic: Everything flows from simulation state, not pre-scripted events
+// - Reproducible: Same seed + inputs = same simulation state every time
 
 ## 14. Data Loading & Persistence - Performance Optimized for 1000+ NPCs
 // Binary Save Format (for save files - FAST & EFFICIENT):
