@@ -1,0 +1,79 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ clang-format clang-tidy
+    
+    - name: Create build directory
+      run: mkdir -p build
+    
+    - name: Configure CMake
+      run: |
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release -DENABLE_COVERAGE=ON ..
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
+    
+    - name: Run tests
+      run: |
+        cd build
+        ./Phase1Tests --verbose
+    
+    - name: Check code format
+      run: |
+        # Format check (non-blocking for now)
+        find include src -name "*.h" -o -name "*.cpp" | while read file; do
+          clang-format -style=file "$file" > "$file.formatted"
+          if ! diff -q "$file" "$file.formatted" > /dev/null; then
+            echo "File $file needs formatting"
+          fi
+          rm "$file.formatted"
+        done || true
+    
+    - name: Run linter
+      run: |
+        # Linting (non-blocking for now)
+        cd build
+        find ../src ../include -name "*.cpp" -o -name "*.h" | xargs clang-tidy || true
+
+  memory-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ valgrind
+    
+    - name: Build
+      run: |
+        mkdir -p build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Debug ..
+        cmake --build .
+    
+    - name: Run memory check
+      run: |
+        cd build
+        valgrind --leak-check=full --show-leak-kinds=all ./Phase1Tests 2>&1 | tee valgrind.log
+        # Fail if memory leaks detected (optional)
+        grep -q "no leaks are possible" valgrind.log || echo "Memory check completed"

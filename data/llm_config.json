@@ -1,0 +1,20 @@
+{
+  "description": "LLM Provider Configuration for Typed Leadership Simulator",
+  "version": "1.0",
+  "provider": "ollama",
+  "ollama": {
+    "serverUrl": "http://localhost:11434",
+    "model": "gemma3:12b",
+    "timeoutSeconds": 60
+  },
+  "fallback": {
+    "enabled": true,
+    "provider": "offline"
+  },
+  "notes": [
+    "To use this configuration, ensure Ollama is running: ollama serve",
+    "Pull your desired model first: ollama pull gemma3:12b",
+    "Other supported models: llama3, mistral, mixtral, phi, etc.",
+    "The simulator will fall back to offline mode if Ollama is unavailable"
+  ]
+}

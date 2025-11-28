@@ -1,0 +1,69 @@
+{
+  "description": "Settlement advisors for the Typed Leadership Simulator",
+  "version": "1.0",
+  "advisors": [
+    {
+      "id": 101,
+      "name": "Councilor Thornwood",
+      "basedOnNpcId": 1,
+      "specialty": "CULTURE",
+      "trustLevel": 0.7,
+      "factionAlignment": 0.6,
+      "agenda": "LONG_TERM",
+      "riskTolerance": 0.3,
+      "strategyStyle": "HONEST",
+      "description": "Elena serves as your agricultural advisor. She focuses on sustainable growth and community welfare."
+    },
+    {
+      "id": 102,
+      "name": "Captain Ironhand",
+      "basedOnNpcId": 2,
+      "specialty": "MILITARY",
+      "trustLevel": 0.8,
+      "factionAlignment": 0.7,
+      "agenda": "SHORT_TERM",
+      "riskTolerance": 0.6,
+      "strategyStyle": "HONEST",
+      "description": "Marcus advises on military matters and settlement defense. He prioritizes security above all else."
+    },
+    {
+      "id": 103,
+      "name": "High Priestess Mira",
+      "basedOnNpcId": 3,
+      "specialty": "RELIGION",
+      "trustLevel": 0.9,
+      "factionAlignment": 0.5,
+      "agenda": "LONG_TERM",
+      "riskTolerance": 0.2,
+      "strategyStyle": "PERSUASIVE",
+      "description": "Sister Mira provides spiritual guidance and moral counsel. She advocates for compassion and unity."
+    },
+    {
+      "id": 104,
+      "name": "Guildmaster Quicksilver",
+      "basedOnNpcId": 4,
+      "specialty": "POLITICS",
+      "trustLevel": 0.5,
+      "factionAlignment": 0.4,
+      "agenda": "SHORT_TERM",
+      "riskTolerance": 0.7,
+      "strategyStyle": "MANIPULATIVE",
+      "description": "Finn advises on trade and political matters. His motives may be self-serving, but his insights are valuable."
+    }
+  ],
+  "specialty_reference": {
+    "POLITICS": 0,
+    "MILITARY": 1,
+    "CULTURE": 2,
+    "RELIGION": 3
+  },
+  "agenda_reference": {
+    "SHORT_TERM": 0,
+    "LONG_TERM": 1
+  },
+  "strategy_reference": {
+    "MANIPULATIVE": 0,
+    "HONEST": 1,
+    "PERSUASIVE": 2
+  }
+}

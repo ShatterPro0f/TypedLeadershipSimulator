@@ -1,0 +1,50 @@
+{
+  "description": "Settlement factions for the Typed Leadership Simulator",
+  "version": "1.0",
+  "factions": [
+    {
+      "id": 0,
+      "name": "Unaffiliated",
+      "description": "Independent settlers without strong faction ties",
+      "alignment": "NEUTRAL",
+      "strength": 0.3,
+      "homeLocation": {"x": 0.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "id": 1,
+      "name": "Farmers' Collective",
+      "description": "Agricultural workers who prioritize food security and peaceful growth. They value hard work, tradition, and community support.",
+      "alignment": "PLAYER_FRIENDLY",
+      "strength": 0.6,
+      "leaders": [1],
+      "homeLocation": {"x": 45.0, "y": -20.0, "z": 0.0}
+    },
+    {
+      "id": 2,
+      "name": "Settlement Guard",
+      "description": "Warriors and defenders who protect the settlement. They value strength, discipline, and preparedness against threats.",
+      "alignment": "PLAYER_FRIENDLY",
+      "strength": 0.7,
+      "leaders": [2],
+      "homeLocation": {"x": -20.0, "y": 5.0, "z": 0.0}
+    },
+    {
+      "id": 3,
+      "name": "Temple Circle",
+      "description": "Priests, healers, and spiritual leaders. They value faith, compassion, and moral guidance for the community.",
+      "alignment": "PLAYER_FRIENDLY",
+      "strength": 0.5,
+      "leaders": [3],
+      "homeLocation": {"x": -50.0, "y": 5.0, "z": 0.0}
+    },
+    {
+      "id": 4,
+      "name": "Merchants' Guild",
+      "description": "Traders, craftsmen, and entrepreneurs. They value prosperity, innovation, and economic growth.",
+      "alignment": "NEUTRAL",
+      "strength": 0.55,
+      "leaders": [4],
+      "homeLocation": {"x": 5.0, "y": 12.0, "z": 0.0}
+    }
+  ]
+}

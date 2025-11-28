@@ -1,0 +1,49 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.sln
+*.vcxproj*
+*.xcodeproj/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Compiled
+*.o
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+*.exe
+
+# Test output
+*.gcov
+*.gcda
+*.gcno
+coverage/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies
+external/*/
+
+# Temporary
+*.tmp
+*.log
+
+# Documentation policy: All .md files must go in docs/ folder
+# Root-level markdown files are not allowed (documentation goes in docs/)
+/*.md
+!README.md

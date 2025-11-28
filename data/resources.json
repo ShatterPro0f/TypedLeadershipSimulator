@@ -1,0 +1,69 @@
+{
+  "description": "Settlement resources for the Typed Leadership Simulator",
+  "version": "1.0",
+  "resources": [
+    {
+      "id": 1,
+      "name": "Food",
+      "quantity": 200,
+      "productionRate": 15,
+      "consumptionRate": 10,
+      "scarcityThreshold": 50,
+      "location": {"x": 45.0, "y": -25.0, "z": 0.0}
+    },
+    {
+      "id": 2,
+      "name": "Water",
+      "quantity": 300,
+      "productionRate": 25,
+      "consumptionRate": 15,
+      "scarcityThreshold": 75,
+      "location": {"x": -30.0, "y": 0.0, "z": 0.0}
+    },
+    {
+      "id": 3,
+      "name": "Wood",
+      "quantity": 150,
+      "productionRate": 10,
+      "consumptionRate": 5,
+      "scarcityThreshold": 30,
+      "location": {"x": -80.0, "y": 20.0, "z": 0.0}
+    },
+    {
+      "id": 4,
+      "name": "Stone",
+      "quantity": 100,
+      "productionRate": 5,
+      "consumptionRate": 3,
+      "scarcityThreshold": 20,
+      "location": {"x": -70.0, "y": -30.0, "z": 0.0}
+    },
+    {
+      "id": 5,
+      "name": "Iron",
+      "quantity": 50,
+      "productionRate": 3,
+      "consumptionRate": 2,
+      "scarcityThreshold": 15,
+      "location": {"x": -65.0, "y": -22.0, "z": 0.0}
+    },
+    {
+      "id": 6,
+      "name": "Medicine",
+      "quantity": 30,
+      "productionRate": 2,
+      "consumptionRate": 1,
+      "scarcityThreshold": 10,
+      "location": {"x": -48.0, "y": 18.0, "z": 0.0}
+    },
+    {
+      "id": 7,
+      "name": "Gold",
+      "quantity": 100,
+      "productionRate": 5,
+      "consumptionRate": 8,
+      "scarcityThreshold": 25,
+      "location": {"x": 8.0, "y": 12.0, "z": 0.0}
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+# TypedLeadershipSimulator
+Leadership Simulator Game

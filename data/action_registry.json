@@ -1,0 +1,434 @@
+{
+  "version": "2.0",
+  "description": "Expanded Phase 5 Action Registry - 25+ semantic player actions for open-world gameplay",
+  "globalParameters": {
+    "toneTypes": ["positive", "neutral", "negative", "aggressive", "diplomatic", "commanding", "pleading"],
+    "scopeTypes": ["individual", "faction", "settlement", "all"],
+    "timingTypes": ["immediate", "delayed", "repeated", "seasonal"],
+    "methodTypes": ["direct", "indirect", "public", "private", "secret"],
+    "intensityRange": { "min": 0.1, "max": 1.0 }
+  },
+  "actions": [
+    {
+      "id": 1,
+      "name": "allocate",
+      "aliases": ["give", "distribute", "provide", "help", "support", "aid", "offer"],
+      "tags": ["economic", "positive", "morale"],
+      "parameterTypes": ["RESOURCE", "NPC_OR_FACTION"],
+      "parameterOptions": {
+        "intensity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 },
+        "scope": { "type": "STRING", "options": ["individual", "faction", "settlement"] }
+      },
+      "consequenceFormula": "loyalty_delta = 0.05 * (amount / population) * tone_multiplier * intensity; mood_delta = +0.1 * intensity",
+      "description": "Allocate resources to NPCs or factions to improve morale and loyalty.",
+      "cascadeRisk": 0.05,
+      "priority": 9,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 2,
+      "name": "withhold",
+      "aliases": ["deny", "refuse", "reject", "exclude", "isolate", "embargo"],
+      "tags": ["economic", "negative", "control"],
+      "parameterTypes": ["RESOURCE", "NPC_OR_FACTION"],
+      "parameterOptions": {
+        "intensity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 },
+        "duration": { "type": "STRING", "options": ["temporary", "indefinite"] }
+      },
+      "consequenceFormula": "loyalty_delta = -0.15 * intensity; mood_delta = -0.20 * intensity; rebellion_risk = +0.08",
+      "description": "Withhold resources from NPCs or factions. Damages loyalty significantly.",
+      "cascadeRisk": 0.15,
+      "priority": 7,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.90
+    },
+    {
+      "id": 3,
+      "name": "delegate",
+      "aliases": ["task", "assign", "command", "order", "send", "deploy"],
+      "tags": ["leadership", "organizational"],
+      "parameterTypes": ["STRING", "NPC_OR_FACTION"],
+      "parameterOptions": {
+        "importance": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 },
+        "urgency": { "type": "STRING", "options": ["routine", "important", "critical"] }
+      },
+      "consequenceFormula": "loyalty_delta = 0.03 * importance; morale_delta = 0.08 * (1 - importance); activity_level = +0.12",
+      "description": "Delegate tasks to NPCs or factions. Affects sense of agency and loyalty.",
+      "cascadeRisk": 0.10,
+      "priority": 8,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 4,
+      "name": "negotiate",
+      "aliases": ["talk", "discuss", "diplomacy", "persuade", "convince", "bargain", "compromise"],
+      "tags": ["diplomatic", "political"],
+      "parameterTypes": ["NPC_OR_FACTION", "STRING"],
+      "parameterOptions": {
+        "method": { "type": "STRING", "options": ["direct", "indirect", "through_intermediary"] },
+        "tone": { "type": "STRING", "options": ["friendly", "neutral", "tough"] }
+      },
+      "consequenceFormula": "alignment_delta = 0.15 * player_charm * tone_factor; loyalty_delta = 0.08; tension_delta = -0.10",
+      "description": "Negotiate with factions or NPCs. Can reduce tensions and improve relationships.",
+      "cascadeRisk": 0.05,
+      "priority": 8,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 5,
+      "name": "inspire",
+      "aliases": ["motivate", "rally", "encourage", "empower", "boost", "uplift", "energize"],
+      "tags": ["morale", "positive", "leadership"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "intensity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.7 },
+        "scope": { "type": "STRING", "options": ["personal", "group", "settlement"] }
+      },
+      "consequenceFormula": "mood_delta = +0.25 * intensity; loyalty_delta = +0.12 * intensity; activity_level_delta = +0.15; duration = 3_days",
+      "description": "Inspire NPCs or factions. Significantly boosts mood and temporary activity.",
+      "cascadeRisk": 0.02,
+      "priority": 9,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 6,
+      "name": "suppress",
+      "aliases": ["punish", "restrict", "control", "enforce", "crack_down", "discipline"],
+      "tags": ["authoritarian", "negative", "control"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "intensity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.6 },
+        "method": { "type": "STRING", "options": ["light_restriction", "severe_punishment"] }
+      },
+      "consequenceFormula": "loyalty_delta = -0.20 * intensity; mood_delta = -0.30 * intensity; rebellion_probability_delta = +0.15 * intensity; suspicion_delta = +0.10",
+      "description": "Suppress NPCs or factions. High-risk: damages loyalty, may trigger rebellion.",
+      "cascadeRisk": 0.25,
+      "priority": 6,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.90
+    },
+    {
+      "id": 7,
+      "name": "investigate",
+      "aliases": ["question", "interrogate", "probe", "examine", "spy", "scout", "surveil"],
+      "tags": ["intelligence", "control"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "method": { "type": "STRING", "options": ["direct_questioning", "secret_surveillance", "through_informant"] },
+        "intensity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 }
+      },
+      "consequenceFormula": "information_gain = +random(1-3) * intensity; loyalty_delta = -0.05 * intensity; suspicion_delta = +0.10 * intensity; trust_delta = -0.08",
+      "description": "Investigate NPCs or factions. Gain information but may reduce trust.",
+      "cascadeRisk": 0.12,
+      "priority": 7,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 8,
+      "name": "trade",
+      "aliases": ["buy", "sell", "exchange", "barter", "commerce", "market", "deal"],
+      "tags": ["economic", "positive"],
+      "parameterTypes": ["RESOURCE", "RESOURCE"],
+      "parameterOptions": {
+        "fairness": { "type": "STRING", "options": ["fair", "exploit", "charity"] },
+        "quantity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 }
+      },
+      "consequenceFormula": "resource_exchange(fairness_factor); loyalty_delta = +0.05 * (fairness - 0.5); relationship_delta = +0.08",
+      "description": "Trade resources with factions. Can improve faction relations.",
+      "cascadeRisk": 0.03,
+      "priority": 8,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 9,
+      "name": "ration",
+      "aliases": ["limit", "reduce", "conserve", "budget", "cut", "restrict_consumption"],
+      "tags": ["economic", "survival"],
+      "parameterTypes": ["RESOURCE"],
+      "parameterOptions": {
+        "percentage": { "type": "FLOAT", "min": 0.1, "max": 0.9, "default": 0.3 },
+        "duration": { "type": "STRING", "options": ["temporary", "until_resupply"] }
+      },
+      "consequenceFormula": "consumption_rate_delta = -(1.0 - percentage); mood_delta = -0.08 * percentage; duration = adaptive",
+      "description": "Ration a resource to extend supply. Temporary, reduces morale.",
+      "cascadeRisk": 0.08,
+      "priority": 7,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.90
+    },
+    {
+      "id": 10,
+      "name": "reward",
+      "aliases": ["praise", "honor", "recognize", "promote", "celebrate", "elevate"],
+      "tags": ["positive", "morale", "leadership"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "type": { "type": "STRING", "options": ["public_recognition", "material_reward", "promotion", "titles"] },
+        "prestige": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.6 }
+      },
+      "consequenceFormula": "loyalty_delta = +0.20; mood_delta = +0.25; status_delta = +prestige; faction_prestige = +0.05",
+      "description": "Reward or promote NPCs. Strongly reinforces loyalty and morale.",
+      "cascadeRisk": 0.02,
+      "priority": 9,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 11,
+      "name": "recruit",
+      "aliases": ["hire", "enlist", "conscript", "invite", "summon", "gather"],
+      "tags": ["military", "organizational"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "method": { "type": "STRING", "options": ["volunteer", "mandatory", "incentive"] },
+        "scale": { "type": "STRING", "options": ["small", "medium", "large"] }
+      },
+      "consequenceFormula": "faction_size_delta = +scale_factor; loyalty_delta = +0.05; mood_delta = -0.05 if mandatory; resource_cost = scale_factor * base_cost",
+      "description": "Recruit NPCs to a faction or task. Can deplete other factions.",
+      "cascadeRisk": 0.18,
+      "priority": 7,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 12,
+      "name": "build",
+      "aliases": ["construct", "establish", "create", "develop", "expand", "fortify"],
+      "tags": ["construction", "economic", "strategic"],
+      "parameterTypes": ["STRING", "NPC_OR_FACTION"],
+      "parameterOptions": {
+        "structure": { "type": "STRING", "options": ["housing", "granary", "walls", "temple", "market", "barracks", "farm"] },
+        "scale": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 }
+      },
+      "consequenceFormula": "resource_consumption = resource_cost * scale; loyalty_delta = +0.08; infrastructure_level = +scale; completion_time = construction_formula(scale)",
+      "description": "Construct buildings or infrastructure. Long-term loyalty investment.",
+      "cascadeRisk": 0.10,
+      "priority": 8,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 13,
+      "name": "defend",
+      "aliases": ["protect", "guard", "fortify", "prepare", "arm", "mobilize"],
+      "tags": ["military", "protective"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "target": { "type": "STRING", "options": ["people", "resources", "territory"] },
+        "intensity": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.7 }
+      },
+      "consequenceFormula": "military_readiness_delta = +intensity; resource_consumption = military_cost * intensity; mood_delta = +0.10 * intensity; loyalty_delta = +0.12",
+      "description": "Mobilize defense forces. Protects settlement but consumes resources.",
+      "cascadeRisk": 0.08,
+      "priority": 8,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 14,
+      "name": "educate",
+      "aliases": ["teach", "train", "instruct", "develop", "mentor", "tutor"],
+      "tags": ["cultural", "developmental"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "subject": { "type": "STRING", "options": ["general", "military", "leadership", "craft", "agriculture"] },
+        "duration": { "type": "STRING", "options": ["short", "long", "intensive"] }
+      },
+      "consequenceFormula": "skill_delta = +subject_skill; loyalty_delta = +0.08; capability_delta = +0.10; resource_cost = duration_cost",
+      "description": "Educate or train NPCs. Improves skills but requires time/resources.",
+      "cascadeRisk": 0.04,
+      "priority": 7,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 15,
+      "name": "convert",
+      "aliases": ["convince", "indoctrinate", "convert_to_faith", "persuade_belief", "preach"],
+      "tags": ["religious", "cultural"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "faith": { "type": "STRING", "options": ["settlement_faith", "target_faith", "atheism"] },
+        "method": { "type": "STRING", "options": ["gentle", "aggressive", "incentive"] }
+      },
+      "consequenceFormula": "religion_delta = +faith_factor; loyalty_delta = +0.10 * (method_factor); mood_delta = -0.05 if aggressive; schism_risk = +0.10 if aggressive",
+      "description": "Convert NPCs to different belief systems. Can trigger religious conflict.",
+      "cascadeRisk": 0.20,
+      "priority": 6,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 16,
+      "name": "ally",
+      "aliases": ["befriend", "unite", "form_alliance", "bond", "strengthen_ties"],
+      "tags": ["diplomatic", "relational"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "degree": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 },
+        "formality": { "type": "STRING", "options": ["casual", "formal_treaty", "blood_oath"] }
+      },
+      "consequenceFormula": "alliance_strength = +degree; loyalty_delta = +0.15 * degree; faction_alignment_delta = +0.20; cooperation_multiplier = +0.25",
+      "description": "Form alliances with factions. Increases cooperation significantly.",
+      "cascadeRisk": 0.05,
+      "priority": 8,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 17,
+      "name": "exile",
+      "aliases": ["banish", "expel", "remove", "cast_out", "banishment"],
+      "tags": ["authoritarian", "extreme"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "permanent": { "type": "BOOLEAN", "default": true },
+        "manner": { "type": "STRING", "options": ["shameful", "neutral", "honored"] }
+      },
+      "consequenceFormula": "population_delta = -faction_size; loyalty_delta = -0.50; mood_delta = -0.40; faction_alignment_delta = -0.30; emigration_wave = +0.20",
+      "description": "Exile faction or NPCs. Extreme measure with cascading consequences.",
+      "cascadeRisk": 0.35,
+      "priority": 4,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.95
+    },
+    {
+      "id": 18,
+      "name": "forgive",
+      "aliases": ["pardon", "absolve", "amnesty", "mercy", "redemption"],
+      "tags": ["merciful", "positive"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "publicness": { "type": "STRING", "options": ["private", "public", "ceremonial"] },
+        "completeness": { "type": "STRING", "options": ["partial", "full"] }
+      },
+      "consequenceFormula": "loyalty_delta = +0.20; reputation_delta = +0.10 * publicness; reconciliation_probability = +0.25; cultural_alignment = +0.08",
+      "description": "Forgive past grievances. Rebuilds trust and relationships.",
+      "cascadeRisk": 0.02,
+      "priority": 8,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 19,
+      "name": "explore",
+      "aliases": ["scout", "send_expedition", "discover", "map", "venture", "survey"],
+      "tags": ["discovery", "exploration"],
+      "parameterTypes": ["STRING"],
+      "parameterOptions": {
+        "direction": { "type": "STRING", "options": ["north", "south", "east", "west", "random"] },
+        "scale": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.5 }
+      },
+      "consequenceFormula": "discovery_probability = base_probability * scale; resource_discovery = discovery_probability * (1-10); danger_risk = +scale * 0.15; time_cost = scale_dependent",
+      "description": "Send exploration missions. Discover new resources or threats.",
+      "cascadeRisk": 0.12,
+      "priority": 7,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 20,
+      "name": "decree",
+      "aliases": ["announce", "proclaim", "declare", "law", "command", "edict"],
+      "tags": ["authoritarian", "leadership", "cultural"],
+      "parameterTypes": ["STRING"],
+      "parameterOptions": {
+        "type": { "type": "STRING", "options": ["law", "cultural_norm", "religious_decree", "economic_policy"] },
+        "enforcement": { "type": "STRING", "options": ["soft", "medium", "strict"] }
+      },
+      "consequenceFormula": "cultural_shift_delta = +type_factor; compliance_probability = 0.7 - (enforcement * 0.1); rebellion_risk = +enforcement * 0.15; mood_delta = enforcement_factor",
+      "description": "Proclaim laws or cultural decrees. Shapes settlement culture over time.",
+      "cascadeRisk": 0.18,
+      "priority": 7,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.85
+    },
+    {
+      "id": 21,
+      "name": "counsel",
+      "aliases": ["consult", "ask_advisor", "advice", "wisdom", "guidance"],
+      "tags": ["meta", "informational"],
+      "parameterTypes": ["NPC"],
+      "parameterOptions": {},
+      "consequenceFormula": "meta_action; returns_advisor_recommendation; no_direct_simulation_impact",
+      "description": "Ask an advisor for counsel. Provides suggestions based on their specialty.",
+      "cascadeRisk": 0.0,
+      "priority": 5,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 22,
+      "name": "status",
+      "aliases": ["info", "report", "check", "what's_happening", "summary"],
+      "tags": ["meta", "informational"],
+      "parameterTypes": [],
+      "parameterOptions": {
+        "detail_level": { "type": "STRING", "options": ["summary", "detailed", "full"] }
+      },
+      "consequenceFormula": "meta_action; no_simulation_impact",
+      "description": "Request status report. Displays current world state.",
+      "cascadeRisk": 0.0,
+      "priority": 5,
+      "requiresConfirmation": false,
+      "confidenceThreshold": 1.0
+    },
+    {
+      "id": 23,
+      "name": "marry",
+      "aliases": ["unite", "wed", "arrange_marriage", "matchmake", "bond"],
+      "tags": ["social", "relational"],
+      "parameterTypes": ["NPC", "NPC"],
+      "parameterOptions": {
+        "consent": { "type": "BOOLEAN", "default": true },
+        "ceremony": { "type": "BOOLEAN", "default": true }
+      },
+      "consequenceFormula": "bond_strength = +0.30; family_ties = +0.20; loyalty_delta = +0.15; cultural_impact = +0.05; immigration_probability = +0.08 (children)",
+      "description": "Arrange marriages. Creates family bonds and can increase immigration.",
+      "cascadeRisk": 0.05,
+      "priority": 6,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.80
+    },
+    {
+      "id": 24,
+      "name": "blackmail",
+      "aliases": ["coerce", "threaten", "extort", "leverage", "scheme"],
+      "tags": ["underhanded", "dangerous"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "evidence": { "type": "STRING", "options": ["rumors", "proof", "fabrication"] },
+        "demand": { "type": "STRING", "options": ["resource", "loyalty", "action"] }
+      },
+      "consequenceFormula": "immediate_compliance = high; loyalty_delta = -0.40; trust_delta = -0.50; discovery_probability = evidence_quality + (1 - evidence_quality) * 0.3; revenge_probability = +0.20",
+      "description": "Use leverage to coerce compliance. High risk of discovery and revenge.",
+      "cascadeRisk": 0.35,
+      "priority": 3,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.95
+    },
+    {
+      "id": 25,
+      "name": "sacrifice",
+      "aliases": ["offer", "tribute", "ritual", "donate_life", "martyrdom"],
+      "tags": ["religious", "extreme", "cultural"],
+      "parameterTypes": ["NPC_OR_FACTION"],
+      "parameterOptions": {
+        "scale": { "type": "FLOAT", "min": 0.1, "max": 1.0, "default": 0.1 },
+        "method": { "type": "STRING", "options": ["willing", "coerced"] }
+      },
+      "consequenceFormula": "religious_power_delta = +scale * 0.50; loyalty_delta = +0.30 if willing, -0.60 if coerced; mood_delta = +0.20 if religious, -0.40 if secular; rebellion_risk = +0.30 if coerced",
+      "description": "Make ritual sacrifices. Extreme measure with religious/cultural effects.",
+      "cascadeRisk": 0.40,
+      "priority": 2,
+      "requiresConfirmation": true,
+      "confidenceThreshold": 0.98
+    }
+  ]
+}
